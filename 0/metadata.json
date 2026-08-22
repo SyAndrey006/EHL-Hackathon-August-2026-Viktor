@@ -1,0 +1,59 @@
+{
+  "cli_version": "0.10.2",
+  "checkpoint_id": "01M0MWX7SSREXR5JDMHXC80MQV",
+  "session_id": "01a029c2-894a-7af1-a128-31f54595cd0c",
+  "strategy": "manual-commit",
+  "created_at": "2026-08-22T14:10:04.1866549Z",
+  "branch": "Dima001",
+  "checkpoints_count": 2,
+  "save_step_count": 1,
+  "files_touched": [
+    ".gitignore",
+    "README.md",
+    "data/mock_viktor_calls.csv",
+    "evaluation.md",
+    "presentation.md",
+    "router.py"
+  ],
+  "agent": "Codex",
+  "model": "gpt-5.6-terra",
+  "turn_id": "96e2ccc3f5cc",
+  "compact_transcript_start": 0,
+  "token_usage": {
+    "input_tokens": 25127,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 304896,
+    "output_tokens": 4378,
+    "api_call_count": 15
+  },
+  "session_metrics": {
+    "turn_count": 2
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-08-22T14:10:04.1190745Z",
+    "agent_lines": 126,
+    "agent_removed": 2,
+    "human_added": 0,
+    "human_modified": 1,
+    "human_removed": 6,
+    "total_committed": 127,
+    "total_lines_changed": 142,
+    "agent_percentage": 90.14084507042254,
+    "metric_version": 2
+  },
+  "prompt_attributions": [
+    {
+      "checkpoint_number": 1,
+      "user_lines_added": 7,
+      "user_lines_removed": 7,
+      "agent_lines_added": 0,
+      "agent_lines_removed": 0,
+      "user_added_per_file": {
+        ".codex/hooks.json": 7
+      },
+      "user_removed_per_file": {
+        ".codex/hooks.json": 7
+      }
+    }
+  ]
+}

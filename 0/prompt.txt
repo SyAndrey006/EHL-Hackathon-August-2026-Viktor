@@ -1,0 +1,20 @@
+I want a mock structure for a model router. "Input: real Viktor trajectories — each LLM call with its model, its input, and its tools. The task is open-ended. You select the objective and defend it.
+ABuild the router
+
+A policy that assigns a model to each call. Optimize cost, quality, or your own trade-off.
+BProve it works
+
+The log shows only the model that ran. Estimate what your router changes.
+
+Ship: a router, an evaluation you can defend, and a short presentation.
+NO GPU NEEDED
+
+Weekend-sized: a static offline export. Baselines train on a laptop in minutes. No GPU, no API key. The depth is in the off-policy evaluation, not in compute."
+
+---
+
+do not go in depth, just a mock, for me to see the idea
+
+---
+
+do not go in depth, just a mock, for me to see the idea
