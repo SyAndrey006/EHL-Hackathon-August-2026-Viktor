@@ -4,7 +4,7 @@
 Policy: short-prompt calls early in a trajectory go to a cheaper sibling model;
 everything else stays on the logged model. Deliberately simple — an honest floor.
 
-Usage: python scripts/baseline_router.py export/   -> writes results/routes.jsonl
+Usage: python scripts/baseline_router.py export/ [results/routes.jsonl]
 """
 import json, sys
 from pathlib import Path
@@ -32,10 +32,12 @@ def route_trajectory(calls):
 
 def main():
     export = sys.argv[1] if len(sys.argv) > 1 else "export"
+    destination = Path(sys.argv[2]) if len(sys.argv) > 2 else Path("results/routes.jsonl")
     pricing = load_pricing()
     groups = group_trajectories(r for _, _, r in iter_requests(export))
     Path("results").mkdir(exist_ok=True)
-    out = open("results/routes.jsonl", "w")
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    out = open(destination, "w")
     tot_logged = tot_routed = 0.0
     for key, calls in groups.items():
         logged = logged_route(calls); routed = route_trajectory(calls)
@@ -51,6 +53,6 @@ def main():
     print(f"routed cost:  ${tot_routed:,.4f}  ({(tot_routed/tot_logged-1):+.1%}, cache-aware)")
     print("NOTE: no outputs/usage in the export — token counts are estimates, output cost excluded,")
     print("and this baseline has NO outcome estimate. Constructing one is the challenge.")
-    print("wrote results/routes.jsonl")
+    print(f"wrote {destination}")
 
 if __name__ == "__main__": main()
