@@ -1,0 +1,31 @@
+{
+  "cli_version": "0.10.2",
+  "checkpoint_id": "01M0NCHN1QBWJRE2HBST6W9M2J",
+  "strategy": "manual-commit",
+  "branch": "feature-Dima-compare4approaches",
+  "checkpoints_count": 6,
+  "files_touched": [
+    "viktor-tumai-starter/scripts/baseline_router.py",
+    "viktor-tumai-starter/scripts/learned_router.py",
+    "viktor-tumai-starter/scripts/offpolicy_eval.py",
+    "viktor-tumai-starter/scripts/outcome_signal.py",
+    "viktor-tumai-starter/scripts/plot_frontier.py",
+    "viktor-tumai-starter/scripts/summarize_results.py"
+  ],
+  "sessions": [
+    {
+      "metadata": "/0/metadata.json",
+      "transcript": "/0/full.jsonl",
+      "compact_transcript": "/0/transcript.jsonl",
+      "content_hash": "/0/content_hash.txt",
+      "prompt": "/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 99060,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 1589760,
+    "output_tokens": 28831,
+    "api_call_count": 42
+  }
+}

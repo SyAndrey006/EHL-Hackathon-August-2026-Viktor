@@ -1,0 +1,146 @@
+Read AGENTS.md in full before doing anything else. This briefs you on the dataset,
+the cache trap, and judging criteria. Then read scripts/baseline_router.py,
+scripts/cost_model.py, scripts/load_trajectories.py, and scripts/plot_frontier.py
+so you understand what already exists — do not rebuild the cost model or loader,
+only extend them if needed.
+
+GOAL FOR THIS SESSION
+Replace the placeholder quality() function in scripts/plot_frontier.py with a real
+outcome signal, and build a learned router that beats scripts/baseline_router.py on
+the cost–quality frontier. This is an off-policy evaluation problem: there is no
+output, no usage, and no quality label in the export — only the model that actually
+served each trajectory. We must construct the outcome signal ourselves and estimate
+the counterfactual (what a different route would have cost/kept) without ever
+running that route for real.
+
+STEP 1 — Structural outcome signal (routing insight criterion)
+Extract features from function_call_output text and trajectory shape that plausibly
+indicate struggle/failure, without any external model calls:
+- error strings / retry patterns in function_call_output
+- number of calls vs. expected for similar tasks (outliers)
+- backtracking: same function_call name+similar args repeated close together
+- trajectory abandoned early vs. reaching a clear "done" assistant message
+Build this as scripts/outcome_signal.py with a documented, rerunnable function
+estimate_outcome(calls) -> float in [0,1]. Name explicitly, in a comment block,
+what this proxy does NOT capture and how it could be wrong — that honesty is scored.
+
+STEP 2 — Off-policy comparison across trajectories (the twist)
+Trajectories are naturally randomized-ish by which model served them. Group similar
+trajectories (by task features: first-user-text embedding or simpler features like
+tool set used, call count, input length) that ran on different models, and compare
+their outcome_signal scores. Implement a simple matching or inverse-propensity
+weighting estimator in scripts/offpolicy_eval.py — keep it simple and explainable
+over clever; document the method so someone else could rerun it. Explicitly log
+where the estimate is likely biased (e.g. if harder tasks are systematically routed
+to stronger models, comparing raw outcomes across models will look better for the
+strong model even if it's not actually needed).
+
+STEP 3 — Learned router
+Using the outcome signal + trajectory features, train a simple, interpretable model
+(logistic regression or small decision tree over explicit features — no black box)
+that predicts the cheapest model likely to keep the outcome, for the FIRST call of a
+trajectory only (since one model serves the whole trajectory per the dataset
+premise). Put this in scripts/learned_router.py, following the same interface as
+baseline_router.py (reads export/, writes results/routes.jsonl) so it's a drop-in
+comparison.
+
+STEP 4 — Frontier
+Update plot_frontier.py's quality() to use the real outcome_signal instead of the
+placeholder. Run baseline_router.py and learned_router.py side by side, plot both
+frontiers on the same chart (baseline vs. learned vs. always-cheapest vs.
+always-most-expensive vs. random, if time allows) so the improvement is visually
+obvious — this is the headline chart for the pitch.
+
+STEP 5 — Sanity + honesty pass
+Run everything end to end on the synthetic sample first (make_synthetic_sample.py)
+to confirm the pipeline works before touching the real export. Then run on
+export/trajectories_v1_00.jsonl. Print a short summary at the end covering:
+cost delta vs. baseline, what the outcome signal measures and its known failure
+modes, and what the off-policy estimator assumes and where it can break. This
+summary is what we'll turn into the presentation's "known weakness" slide.
+
+CONSTRAINTS
+- No GPU, no API keys required for the core pipeline (judge-model rescoring is
+  optional/stretch — skip it unless there's clear time budget left).
+- Never commit or upload export/ (it's gitignored — keep it that way).
+- Keep code readable and commented — a judge or teammate should be able to follow
+  the logic without me explaining it live.
+- Work incrementally: after each step, run the relevant script and show me the
+  output before moving to the next step. Don't silently chain all five steps.
+
+Start with Step 1. Show me the feature list and outcome_signal logic before writing
+the off-policy estimator.
+
+---
+
+proceed to Step 2 (Off-policy evaluation).
+
+---
+
+proceed to STEP 3 — Learned router
+
+---
+
+move on to Step 4
+
+---
+
+Can you move onto step 5, if so - do, if i had to do it manually - tell me.
+
+---
+
+PS D:\_my_stuff\HACKATHON-08-2026\task2-Viktor\EHL-Hackathon-August-2026-Viktor> cd .\viktor-tumai-starter\
+PS D:\_my_stuff\HACKATHON-08-2026\task2-Viktor\EHL-Hackathon-August-2026-Viktor\viktor-tumai-starter> python scripts/make_synthetic_sample.py --out .tmp_synthetic --n-tasks 25 --seed 7
+Wrote synthetic sample: 25 tasks, 153 requests -> .tmp_synthetic/trajectories_v1_00.jsonl
+per-model task counts: {'claude-fable-5': 4, 'gpt-5.6-sol': 5, 'gpt-5.6-luna': 4, 'claude-opus-4-8': 4, 'gpt-5.6-terra': 4, 'claude-sonnet-5': 2, 'claude-opus-5': 2}
+PS D:\_my_stuff\HACKATHON-08-2026\task2-Viktor\EHL-Hackathon-August-2026-Viktor\viktor-tumai-starter> python scripts/load_trajectories.py .tmp_synthetic
+requests=153  per-model request counts: {'gpt-5.6-terra': 25, 'claude-opus-4-8': 32, 'claude-sonnet-5': 10, 'gpt-5.6-sol': 38, 'claude-fable-5': 17, 'claude-opus-5': 8, 'gpt-5.6-luna': 23}
+reconstructed trajectories=25  calls/trajectory min/median/max: 3/5/10
+trajectories with >1 model: 0  (matches the one-model-per-trajectory premise)
+est. input tokens (chars/4, no usage in export): 193,515
+schema check on first request: missing=none extra=none
+PS D:\_my_stuff\HACKATHON-08-2026\task2-Viktor\EHL-Hackathon-August-2026-Viktor\viktor-tumai-starter> python scripts/outcome_signal.py .tmp_synthetic
+trajectories=25  mean outcome=0.788  min/median/max=0.630/0.800/0.900
+visible signals: {'error_outputs': 0, 'retry_pairs': 76, 'potentially_abandoned': 0}
+NOTE: outcome is an execution-health proxy, not observed correctness; see source for failure modes.
+PS D:\_my_stuff\HACKATHON-08-2026\task2-Viktor\EHL-Hackathon-August-2026-Viktor\viktor-tumai-starter> python scripts/offpolicy_eval.py .tmp_synthetic
+eligible single-model trajectories=25; models=7; caliper=1.25
+pairwise effect = outcome(model_a) - outcome(matched model_b)
+claude-fable-5 vs claude-opus-4-8: matched=4 effect=0.0875 mean_distance=0.2674 support=matched
+claude-fable-5 vs claude-opus-5: matched=4 effect=-0.0375 mean_distance=0.2257 support=matched
+claude-fable-5 vs claude-sonnet-5: matched=4 effect=0.012 mean_distance=0.3573 support=matched
+claude-fable-5 vs gpt-5.6-luna: matched=4 effect=0.08 mean_distance=0.219 support=matched
+claude-fable-5 vs gpt-5.6-sol: matched=4 effect=0.123 mean_distance=0.2891 support=matched
+claude-fable-5 vs gpt-5.6-terra: matched=4 effect=0.0575 mean_distance=0.2174 support=matched
+claude-opus-4-8 vs claude-opus-5: matched=4 effect=-0.1525 mean_distance=0.4407 support=matched
+claude-opus-4-8 vs claude-sonnet-5: matched=4 effect=-0.004 mean_distance=0.3465 support=matched
+claude-opus-4-8 vs gpt-5.6-luna: matched=4 effect=0.05 mean_distance=0.3757 support=matched
+claude-opus-4-8 vs gpt-5.6-sol: matched=4 effect=0.0155 mean_distance=0.2017 support=matched
+claude-opus-4-8 vs gpt-5.6-terra: matched=4 effect=0.0075 mean_distance=0.1525 support=matched
+claude-opus-5 vs claude-sonnet-5: matched=2 effect=0.099 mean_distance=0.2425 support=matched
+claude-opus-5 vs gpt-5.6-luna: matched=2 effect=0.05 mean_distance=0.08 support=matched
+claude-opus-5 vs gpt-5.6-sol: matched=2 effect=0.123 mean_distance=0.3103 support=matched
+claude-opus-5 vs gpt-5.6-terra: matched=2 effect=0.05 mean_distance=0.0579 support=matched
+claude-sonnet-5 vs gpt-5.6-luna: matched=2 effect=-0.099 mean_distance=0.1396 support=matched
+claude-sonnet-5 vs gpt-5.6-sol: matched=2 effect=0.012 mean_distance=0.2829 support=matched
+claude-sonnet-5 vs gpt-5.6-terra: matched=2 effect=-0.099 mean_distance=0.178 support=matched
+gpt-5.6-luna vs gpt-5.6-sol: matched=4 effect=0.1225 mean_distance=0.2912 support=matched
+gpt-5.6-luna vs gpt-5.6-terra: matched=4 effect=-0.0225 mean_distance=0.2064 support=matched
+gpt-5.6-sol vs gpt-5.6-terra: matched=5 effect=-0.062 mean_distance=0.2483 support=matched
+wrote results/offpolicy_pairs.csv and results/offpolicy_summary.json
+BIAS WARNING: matching does not remove unobserved task difficulty or proxy-label error.
+PS D:\_my_stuff\HACKATHON-08-2026\task2-Viktor\EHL-Hackathon-August-2026-Viktor\viktor-tumai-starter> python scripts/baseline_router.py .tmp_synthetic results/baseline_routes.jsonl
+logged cost (est. input tokens, official prices):  $0.2524
+routed cost:  $0.0957  (-62.1%, cache-aware)
+NOTE: no outputs/usage in the export — token counts are estimates, output cost excluded,
+and this baseline has NO outcome estimate. Constructing one is the challenge.
+wrote results\baseline_routes.jsonl
+PS D:\_my_stuff\HACKATHON-08-2026\task2-Viktor\EHL-Hackathon-August-2026-Viktor\viktor-tumai-starter> python scripts/learned_router.py .tmp_synthetic results/learned_routes.jsonl
+trained depth<=3 regression tree on 25 trajectories; per-model={'gpt-5.6-terra': 4, 'claude-opus-4-8': 4, 'claude-sonnet-5': 2, 'gpt-5.6-sol': 5, 'claude-fable-5': 4, 'claude-opus-5': 2, 'gpt-5.6-luna': 4}
+learned rules written to results/learned_tree_rules.txt
+logged cost (est. input tokens, official prices): $0.2524
+routed cost: $0.2524 (+0.0%, cache-aware)
+decisions: {'no_supported_safe_candidate': 25}
+NOTE: outcome retention is model-predicted from observational proxy labels; use offpolicy_eval.py for matching diagnostics.
+wrote results\learned_routes.jsonl
+PS D:\_my_stuff\HACKATHON-08-2026\task2-Viktor\EHL-Hackathon-August-2026-Viktor\viktor-tumai-starter>

@@ -1,0 +1,103 @@
+{
+  "cli_version": "0.10.2",
+  "checkpoint_id": "01M0NCHN1QBWJRE2HBST6W9M2J",
+  "session_id": "01a02a45-d46e-7443-aad4-f830b77d011f",
+  "strategy": "manual-commit",
+  "created_at": "2026-08-22T18:43:21.8000983Z",
+  "branch": "feature-Dima-compare4approaches",
+  "checkpoints_count": 6,
+  "save_step_count": 6,
+  "files_touched": [
+    "viktor-tumai-starter/scripts/baseline_router.py",
+    "viktor-tumai-starter/scripts/learned_router.py",
+    "viktor-tumai-starter/scripts/offpolicy_eval.py",
+    "viktor-tumai-starter/scripts/outcome_signal.py",
+    "viktor-tumai-starter/scripts/plot_frontier.py",
+    "viktor-tumai-starter/scripts/summarize_results.py"
+  ],
+  "agent": "Codex",
+  "model": "gpt-5.6-terra",
+  "turn_id": "01bce6a83bda",
+  "compact_transcript_start": 0,
+  "token_usage": {
+    "input_tokens": 99060,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 1589760,
+    "output_tokens": 28831,
+    "api_call_count": 42
+  },
+  "session_metrics": {
+    "turn_count": 6
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-08-22T18:43:21.7094967Z",
+    "agent_lines": 765,
+    "agent_removed": 35,
+    "human_added": 785,
+    "human_modified": 54,
+    "human_removed": 0,
+    "total_committed": 1604,
+    "total_lines_changed": 1639,
+    "agent_percentage": 48.81025015253203,
+    "metric_version": 2
+  },
+  "prompt_attributions": [
+    {
+      "checkpoint_number": 1,
+      "user_lines_added": 0,
+      "user_lines_removed": 0,
+      "agent_lines_added": 0,
+      "agent_lines_removed": 0
+    },
+    {
+      "checkpoint_number": 2,
+      "user_lines_added": 153,
+      "user_lines_removed": 0,
+      "agent_lines_added": 178,
+      "agent_lines_removed": 0,
+      "user_added_per_file": {
+        "viktor-tumai-starter/.tmp_synthetic/trajectories_v1_00.jsonl": 153
+      }
+    },
+    {
+      "checkpoint_number": 3,
+      "user_lines_added": 153,
+      "user_lines_removed": 0,
+      "agent_lines_added": 353,
+      "agent_lines_removed": 0,
+      "user_added_per_file": {
+        "viktor-tumai-starter/.tmp_synthetic/trajectories_v1_00.jsonl": 153
+      }
+    },
+    {
+      "checkpoint_number": 4,
+      "user_lines_added": 153,
+      "user_lines_removed": 0,
+      "agent_lines_added": 540,
+      "agent_lines_removed": 0,
+      "user_added_per_file": {
+        "viktor-tumai-starter/.tmp_synthetic/trajectories_v1_00.jsonl": 153
+      }
+    },
+    {
+      "checkpoint_number": 5,
+      "user_lines_added": 153,
+      "user_lines_removed": 0,
+      "agent_lines_added": 761,
+      "agent_lines_removed": 86,
+      "user_added_per_file": {
+        "viktor-tumai-starter/.tmp_synthetic/trajectories_v1_00.jsonl": 153
+      }
+    },
+    {
+      "checkpoint_number": 6,
+      "user_lines_added": 153,
+      "user_lines_removed": 0,
+      "agent_lines_added": 819,
+      "agent_lines_removed": 86,
+      "user_added_per_file": {
+        "viktor-tumai-starter/.tmp_synthetic/trajectories_v1_00.jsonl": 153
+      }
+    }
+  ]
+}
