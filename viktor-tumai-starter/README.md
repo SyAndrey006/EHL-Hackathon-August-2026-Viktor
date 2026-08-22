@@ -42,6 +42,17 @@ In Claude Code you also get slash commands:
 | `AGENTS.md` | Agent briefing: dataset shape, the cache trap, judging, starter ideas |
 | `skills/` | The three guided workflows above (plain Markdown, readable by humans too) |
 | `scripts/` | Loader + trajectory reconstruction, baseline router, cache-aware cost model (estimated tokens), frontier plot, synthetic sample |
+
+The stateful layered implementation is in `scripts/session_router.py`. It is provider-neutral:
+inject `model_call`, optional per-model tokenizers, and a second-model judge for production use.
+Run `python scripts/session_router.py` for the offline demo.
+For live OpenAI routing, install `openai`, set `OPENAI_API_KEY`, and run
+`python scripts/session_router.py --live "your request"`. The policy uses GPT-5.6 Luna,
+Terra, and Sol as its low, middle, and high tiers.
+For OpenRouter, set `OPENROUTER_API_KEY` and run
+`python scripts/openrouter_router.py "your request"`. Set `OPENROUTER_LUNA_MODEL`,
+`OPENROUTER_TERRA_MODEL`, and `OPENROUTER_SOL_MODEL` to map the router aliases to
+provider model ids. Cost estimates use the existing `scripts/cost_model.py` price table.
 | `templates/presentation.html` | Self-contained branded slide template |
 
 ## Rules that matter

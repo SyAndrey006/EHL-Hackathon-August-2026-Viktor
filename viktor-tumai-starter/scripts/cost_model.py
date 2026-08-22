@@ -19,7 +19,10 @@ rate by longest prefix; scripts/pricing.json overrides everything.
 """
 import json
 from pathlib import Path
-from load_trajectories import est_tokens
+try:  # Support both direct script execution and imports via ``scripts``.
+    from .load_trajectories import est_tokens
+except ImportError:  # pragma: no cover - exercised by the existing CLI.
+    from load_trajectories import est_tokens
 
 DEFAULT_PRICING = {  # per 1M tokens: [uncached_input, cached_input(read), output] — official rates
     "claude-opus-5": [5.00, 0.50, 25.00],
