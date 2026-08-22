@@ -1,0 +1,58 @@
+{
+  "cli_version": "0.10.2",
+  "checkpoint_id": "01M0NKZN7Z3GPJ60RXWWNSC833",
+  "session_id": "01a02b32-12a1-71a3-9971-2df5c2066730",
+  "strategy": "manual-commit",
+  "created_at": "2026-08-22T20:53:21.0634859Z",
+  "branch": "Festure-ConfidenceRouter-kinda",
+  "checkpoints_count": 1,
+  "save_step_count": 1,
+  "files_touched": [
+    "scripts/plot_frontier.py",
+    "viktor-tumai-starter/scripts/plot_frontier.py"
+  ],
+  "agent": "Codex",
+  "model": "gpt-5.6-sol",
+  "turn_id": "7bb1bdda0664",
+  "compact_transcript_start": 0,
+  "token_usage": {
+    "input_tokens": 21886,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 55377,
+    "output_tokens": 6815,
+    "api_call_count": 4
+  },
+  "session_metrics": {
+    "turn_count": 1
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-08-22T20:53:21.0109302Z",
+    "agent_lines": 192,
+    "agent_removed": 0,
+    "human_added": 0,
+    "human_modified": 75,
+    "human_removed": 50,
+    "total_committed": 192,
+    "total_lines_changed": 317,
+    "agent_percentage": 60.56782334384858,
+    "metric_version": 2
+  },
+  "prompt_attributions": [
+    {
+      "checkpoint_number": 1,
+      "user_lines_added": 729,
+      "user_lines_removed": 50,
+      "agent_lines_added": 0,
+      "agent_lines_removed": 0,
+      "user_added_per_file": {
+        "viktor-tumai-starter/scripts/confidence_router.py": 322,
+        "viktor-tumai-starter/scripts/learned_router.py": 175,
+        "viktor-tumai-starter/scripts/outcome_signal.py": 156,
+        "viktor-tumai-starter/scripts/plot_frontier.py": 76
+      },
+      "user_removed_per_file": {
+        "viktor-tumai-starter/scripts/plot_frontier.py": 50
+      }
+    }
+  ]
+}

@@ -3,11 +3,13 @@
   "checkpoint_id": "01M0NKZN7Z3GPJ60RXWWNSC833",
   "strategy": "manual-commit",
   "branch": "Festure-ConfidenceRouter-kinda",
-  "checkpoints_count": 3,
+  "checkpoints_count": 4,
   "files_touched": [
+    "scripts/plot_frontier.py",
     "viktor-tumai-starter/scripts/confidence_router.py",
     "viktor-tumai-starter/scripts/learned_router.py",
-    "viktor-tumai-starter/scripts/outcome_signal.py"
+    "viktor-tumai-starter/scripts/outcome_signal.py",
+    "viktor-tumai-starter/scripts/plot_frontier.py"
   ],
   "sessions": [
     {
@@ -16,13 +18,20 @@
       "compact_transcript": "/0/transcript.jsonl",
       "content_hash": "/0/content_hash.txt",
       "prompt": "/0/prompt.txt"
+    },
+    {
+      "metadata": "/1/metadata.json",
+      "transcript": "/1/full.jsonl",
+      "compact_transcript": "/1/transcript.jsonl",
+      "content_hash": "/1/content_hash.txt",
+      "prompt": "/1/prompt.txt"
     }
   ],
   "token_usage": {
-    "input_tokens": 53305,
+    "input_tokens": 75191,
     "cache_creation_tokens": 0,
-    "cache_read_tokens": 626944,
-    "output_tokens": 16759,
-    "api_call_count": 19
+    "cache_read_tokens": 682321,
+    "output_tokens": 23574,
+    "api_call_count": 23
   }
 }

@@ -1,0 +1,17 @@
+@Entire
+
+Ignore my previous instruction about not writing files. You are an autonomous agent and I expect you to apply the code modifications yourself. 
+
+Your shell commands (like Get-Content) are failing in my Windows environment. Stop using the terminal to read/write. Strictly use your native file-editing tools to completely overwrite `scripts/plot_frontier.py`.
+
+We need to rewrite it to fix the flat-line chart. The previous version used internal tree predictions instead of calculating the actual matched OPE health.
+
+Requirements for the new `scripts/plot_frontier.py`:
+1. Accept multiple `.jsonl` route files (`baseline_routes.jsonl`, `learned_routes.jsonl`, `confidence_routes.jsonl`) AND the `export/` directory as positional arguments.
+2. Load the true trajectories from `export/` and perform nearest-neighbor matching (using first_user_chars, first_input_tokens, tool_count, tool_set) exactly like `offpolicy_eval.py`.
+3. For each route file, sweep an adoption fraction from 0.0 to 1.0. Prioritize trajectories by cheapest `cost_logged_usd`.
+4. For adopted tasks, add `cost_routed_usd` and calculate the matched OPE outcome for the routed model. For unadopted tasks, use `cost_logged_usd` and the logged model's matched outcome.
+5. Multiply the outcome by `n_calls` to get a weighted average execution health for the Y-axis.
+6. Plot all series, plus 'always-cheapest' and 'always-most-expensive', on `results/frontier.png` using `matplotlib.use("Agg")`. Save summary points to `results/frontier.csv`.
+
+Apply the rewrite directly to the file and confirm when it is done.
