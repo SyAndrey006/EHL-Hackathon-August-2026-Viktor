@@ -1,0 +1,37 @@
+Can you please undo changes, so it would come back to this approach
+
+---
+
+We need to rewrite scripts/baseline_router.py so that our cost-quality frontier forms a clean, monotonically curving Pareto frontier (no looping back or bulging).
+
+Implement a true dynamic evaluation router inside route_trajectory(calls) that performs a per-call cost-benefit analysis:
+
+Continuous Complexity Scoring: For each call, compute a score based on prompt size, token growth, and tool density.
+
+Bidirectional Tiering (Up and Down):
+
+If a call has low complexity and small growth, dynamically route it to a cheap tier (gpt-5.6-luna), provided the cache-reset penalty doesn't exceed the savings.
+
+If a call has high complexity, exceptional tools, or follows a tool error, dynamically push it up to a strong tier (gpt-5.6-terra or claude-opus-5), even if the logged model was a mid-tier one.
+
+Smooth Pareto Trade-off: Ensure that model switches are governed by a continuous utility threshold rather than rigid binary steps. This ensures that as we sweep through different aggressiveness levels, costs and quality change smoothly in a single direction.
+
+Update the script, ensure full compatibility with evaluate_frontier.py, and let's regenerate our clean frontier.
+
+---
+
+i need to return the state, where i had
+
+---
+
+logged cost (estimated input tokens): $0.2524
+routed cost: $0.0591 (-76.6%, cache-aware)
+
+---
+
+I need to return to the state, where i had : logged cost (estimated input tokens): $0.2524
+routed cost: $0.0591 (-76.6%, cache-aware)
+
+---
+
+Please upgrade scripts/baseline_router.py to fix the non-monotonic bulge in our cost-quality frontier and increase overall task quality while maximizing cost savings.Implement a continuous, utility-based routing engine with the following logic:Continuous Complexity Scoring: Calculate a normalized complexity_score (0.0 to 1.0) for each call. Weight this heavily on prompt_token_growth and tool_token_ratio. Treat any previous_call_error as a massive complexity spike (forcing a 1.0 score).3-Tier Dynamic Fallback: Replace the hardcoded CHEAP_MODEL logic with a 3-tier family-aware dictionary (strong, mid, cheap). Deep continuations shouldn't automatically drop to cheap; medium-complexity tasks should gracefully degrade to a mid-tier model (like claude-sonnet-5 or gpt-5.6-sol) to preserve quality.Marginal Utility Sweep: Expose an aggressiveness parameter (0.0 to 1.0, default 0.5) in route_trajectory(). A model downgrade is only permitted if the cache-aware cost savings strictly exceed the cache reset penalty AND the call's complexity_score falls below the threshold dictated by the aggressiveness level.Strict Monotonicity Guarantee: To prevent the frontier curve from looping backward, implement a trajectory-level check during the sweep. Ensure that any route proposed at aggressiveness $X$ is never mathematically more expensive (cache-aware) than the route at $X-\epsilon$. If a mid-tier switch accidentally increases downstream cache costs, fall back to the cheaper overall route.Keep the public interface intact so evaluate_frontier.py functions perfectly. Output the complete updated script.

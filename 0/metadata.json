@@ -1,0 +1,48 @@
+{
+  "cli_version": "0.10.2",
+  "checkpoint_id": "01M0NEDVWVR9CB2G5H77VHJ5T4",
+  "session_id": "01a02abf-5f7c-70c1-970f-144b588572c9",
+  "strategy": "manual-commit",
+  "created_at": "2026-08-22T19:16:14.5310456Z",
+  "branch": "Andrew2.1",
+  "checkpoints_count": 1,
+  "save_step_count": 2,
+  "files_touched": [
+    "viktor-tumai-starter/scripts/baseline_router.py"
+  ],
+  "agent": "Codex",
+  "model": "gpt-5.6-sol",
+  "turn_id": "516de1077155",
+  "compact_transcript_start": 0,
+  "token_usage": {
+    "input_tokens": 54659,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 1032439,
+    "output_tokens": 10477,
+    "api_call_count": 28
+  },
+  "session_metrics": {
+    "turn_count": 3
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-08-22T19:16:14.459133Z",
+    "agent_lines": 69,
+    "agent_removed": 82,
+    "human_added": 0,
+    "human_modified": 171,
+    "human_removed": 0,
+    "total_committed": 240,
+    "total_lines_changed": 322,
+    "agent_percentage": 46.8944099378882,
+    "metric_version": 2
+  },
+  "prompt_attributions": [
+    {
+      "checkpoint_number": 2,
+      "user_lines_added": 0,
+      "user_lines_removed": 0,
+      "agent_lines_added": 0,
+      "agent_lines_removed": 0
+    }
+  ]
+}
