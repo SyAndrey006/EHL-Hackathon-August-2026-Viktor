@@ -1,0 +1,45 @@
+We need to upgrade our dynamic routing engine in scripts/baseline_router.py to make it smarter, highly adaptive, and optimized for the cost-quality frontier.
+
+Please update baseline_router.py with the following enhancements:
+
+Dynamic Task-Length Profiling: Instead of a blanket rule for deep trajectories, calculate the total estimated token size of the trajectory dynamically. If a trajectory is exceptionally long (>20,000 tokens), allow earlier and more aggressive down-routing to cheap models after the first 2 calls, because the prefix savings outweigh the risk.
+
+Adaptive Tool-Complexity Scoring: Replace the static tool-count threshold with a dynamic ratio. Compute the ratio of tool-definition tokens to total prompt tokens. If tool tokens make up >25% of the prompt, dynamically force a strong reasoning model.
+
+Refined Cache-Reset Guardrail: Make the _switch_is_economical calculation more granular. Factor in the exact length of the shared input prefix: if the shared prefix is massive (>10,000 tokens), make the penalty multiplier stricter so the router doesn't foolishly trigger a model switch that invalidates a huge cache.
+
+Multi-Tier Fallback Support: Expand model options beyond just gpt-5.6-luna for cheap calls and gpt-5.6-terra/claude-opus-5 for strong calls. Implement a mid-tier fallback (e.g., claude-sonnet-5 or gpt-5.6-sol) for medium-complexity middle calls, creating a smooth 3-tier grading system instead of a binary switch.
+
+Ensure the public interface route_trajectory(calls) remains fully compatible with our evaluate_frontier.py harness and cost_model.py. Output the updated code.
+
+---
+
+We need to rewrite scripts/baseline_router.py so that our cost-quality frontier forms a clean, monotonically curving Pareto frontier (no looping back or bulging).
+
+Implement a true dynamic evaluation router inside route_trajectory(calls) that performs a per-call cost-benefit analysis:
+
+Continuous Complexity Scoring: For each call, compute a score based on prompt size, token growth, and tool density.
+
+Bidirectional Tiering (Up and Down):
+
+If a call has low complexity and small growth, dynamically route it to a cheap tier (gpt-5.6-luna), provided the cache-reset penalty doesn't exceed the savings.
+
+If a call has high complexity, exceptional tools, or follows a tool error, dynamically push it up to a strong tier (gpt-5.6-terra or claude-opus-5), even if the logged model was a mid-tier one.
+
+Smooth Pareto Trade-off: Ensure that model switches are governed by a continuous utility threshold rather than rigid binary steps. This ensures that as we sweep through different aggressiveness levels, costs and quality change smoothly in a single direction.
+
+Update the script, ensure full compatibility with evaluate_frontier.py, and let's regenerate our clean frontier.
+
+---
+
+We need to give our routing engine in scripts/baseline_router.py a final production-grade upgrade to make it exceptionally robust and precise.
+
+Please update baseline_router.py (and integrate cleanly with outcomes.py if needed) with the following features:
+
+Adaptive Complexity Weights: Dynamically adjust the weights in complexity_score based on the task profile. If the prompt contains a rich tool-set (high tool count/tokens), automatically shift a higher weight toward tool_score. If it's a deep text-generation task, shift weight toward prompt size and growth.
+
+Switching Fatigue Penalty: Implement a stability guardrail to prevent erratic model flapping. If a trajectory switches models more frequently than once every 3 calls, apply a small penalty to the utility score of that switch unless it's an explicit error-recovery escalation. This ensures stability in the agent's context window.
+
+Transcript Export for LLM-Judge: Ensure that our evaluation and routing logs cleanly export structured metadata alongside format_transcript_for_judge from outcomes.py, making it frictionless to feed these trajectories into an off-policy LLM judge later.
+
+Preserve the monotonic aggressiveness sweep and the public route_trajectory(calls) interface. Output the fully updated Python code.
