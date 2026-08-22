@@ -1,0 +1,45 @@
+We have successfully run the baseline pipeline on the synthetic data, showing a 62% cost reduction, but as the script notes, we have no outcome estimate. We need to build the outcome signal now.
+
+Create a new module named outcomes.py. Since we do not have ground-truth quality labels or final outputs in the JSONL export, we must construct a robust proxy metric for task success based on the intermediate steps.
+
+Implement a function evaluate_trajectory_outcome(trajectory_calls: pd.DataFrame) -> dict that evaluates a single reconstructed task's success. It must include:
+
+A Heuristic Error Proxy: Analyze the intermediate function_call_output and custom_tool_call_output fields (which are visible inside the input histories of subsequent calls). Look for error signatures (e.g., "Exception", "Error", "Failed", "timeout"). If a trajectory ends with a cluster of tool errors or repeated failed function calls, flag it as a heuristic failure.
+
+An LLM-Judge Preparation Pipeline: Write a function format_transcript_for_judge(trajectory_calls: pd.DataFrame) -> str that extracts and formats the chronological history of the agent's actions into a clean, readable text transcript. We will use this to feed a lightweight off-policy judge model later to score whether the agent conceptually resolved the prompt.
+
+Output the Python code for outcomes.py with strict type hints and robust data handling for Pandas DataFrames.
+
+---
+
+Now we need to bridge cost and quality to establish our baseline for the cost-quality frontier. Create a new script named evaluate_frontier.py that ties our existing modules together.
+
+The script must:
+
+Ingest the JSONL dataset using load_trajectories.py.
+
+Iterate through the reconstructed trajectories and apply evaluate_trajectory_outcome from outcomes.py to calculate the "Baseline Heuristic Success Rate" (the percentage of tasks that did not end in a heuristic failure).
+
+Calculate the original cache-aware cost of the dataset using the logic from cost_model.py.
+
+Run the data through baseline_router.py to calculate the new routed cost.
+
+Print a clean, formatted terminal summary showing: Total Tasks, Baseline Cost, Baseline Heuristic Success Rate, and the New Routed Cost.
+
+Ensure the script imports correctly from the existing local modules. Do not alter the routing logic yet; just build this evaluation harness.
+
+---
+
+Our evaluation harness in evaluate_frontier.py is working perfectly. Now we need to upgrade the actual routing logic inside baseline_router.py to optimize the cost-quality frontier intelligently.
+
+Rewrite the routing logic in baseline_router.py to implement a robust heuristic decision tree using the Pandas DataFrame features. Apply the following algorithmic rules to assign models:
+
+First Call Foundation: If is_first_call is True, always route to a highly capable frontier model (e.g., claude-opus-5 or gpt-5.6-terra) to ensure the agent's initial plan is rock solid.
+
+Tool-Heavy Complexity: If the tools list is exceptionally long or if the immediate previous call in the history resulted in an error (use our outcome proxy logic), route to a strong reasoning model to recover.
+
+Cheap Continuations: If the call index is > 2 (deep in the trajectory) and the prompt token growth is small, route to the cheapest available model (e.g., gpt-5.6-luna) for simple execution.
+
+Cache-Aware Switch Penalty: Implement a mathematical check before any model switch: Do not switch to a cheaper model if the cost penalty of resetting the cached input prefix is greater than the expected savings on the appended tokens.
+
+Output the completely updated baseline_router.py code. Ensure it interfaces perfectly with our existing cost_model.py and outcomes.py.
