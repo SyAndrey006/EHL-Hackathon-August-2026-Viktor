@@ -1,0 +1,33 @@
+Can you please undo changes, so it would come back to this approach
+
+---
+
+We need to rewrite scripts/baseline_router.py so that our cost-quality frontier forms a clean, monotonically curving Pareto frontier (no looping back or bulging).
+
+Implement a true dynamic evaluation router inside route_trajectory(calls) that performs a per-call cost-benefit analysis:
+
+Continuous Complexity Scoring: For each call, compute a score based on prompt size, token growth, and tool density.
+
+Bidirectional Tiering (Up and Down):
+
+If a call has low complexity and small growth, dynamically route it to a cheap tier (gpt-5.6-luna), provided the cache-reset penalty doesn't exceed the savings.
+
+If a call has high complexity, exceptional tools, or follows a tool error, dynamically push it up to a strong tier (gpt-5.6-terra or claude-opus-5), even if the logged model was a mid-tier one.
+
+Smooth Pareto Trade-off: Ensure that model switches are governed by a continuous utility threshold rather than rigid binary steps. This ensures that as we sweep through different aggressiveness levels, costs and quality change smoothly in a single direction.
+
+Update the script, ensure full compatibility with evaluate_frontier.py, and let's regenerate our clean frontier.
+
+---
+
+i need to return the state, where i had
+
+---
+
+logged cost (estimated input tokens): $0.2524
+routed cost: $0.0591 (-76.6%, cache-aware)
+
+---
+
+I need to return to the state, where i had : logged cost (estimated input tokens): $0.2524
+routed cost: $0.0591 (-76.6%, cache-aware)
