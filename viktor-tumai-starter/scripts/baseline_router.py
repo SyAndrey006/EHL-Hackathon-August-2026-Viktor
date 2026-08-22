@@ -1,56 +1,226 @@
 #!/usr/bin/env python3
-"""Baseline heuristic router (starter idea 01) + cache-aware cost report.
+"""Feature-based heuristic router with cache-aware model-switch decisions.
 
-Policy: short-prompt calls early in a trajectory go to a cheaper sibling model;
-everything else stays on the logged model. Deliberately simple — an honest floor.
-
-Usage: python scripts/baseline_router.py export/   -> writes results/routes.jsonl
+The router uses only information available at each call: request size, tool-set
+size, call depth, and tool outputs already present in the cumulative history.
+It keeps the public ``route_trajectory(calls)`` interface used by the evaluator.
 """
-import json, sys
+
+from __future__ import annotations
+
+import json
+import sys
 from pathlib import Path
-from load_trajectories import iter_requests, group_trajectories, est_tokens
-from cost_model import trajectory_cost, logged_route, load_pricing
+from typing import Any, Mapping, Sequence
 
-# Cheaper sibling per family, from the official price sheet in cost_model.py:
-# within claude, sonnet-5 is the cheapest tier (fable-5 is the premium one);
-# within gpt-5.6, luna is by far the cheapest (0.20 vs 5.00 uncached input).
-CHEAP = {"claude": "claude-sonnet-5", "gpt": "gpt-5.6-luna"}
+import pandas as pd
 
-def cheap_for(model):
-    return CHEAP["claude"] if model.startswith("claude") else CHEAP["gpt"]
+from cost_model import (
+    load_pricing,
+    logged_route,
+    price_of,
+    shared_prefix_tokens,
+    trajectory_cost,
+)
+from load_trajectories import est_tokens, group_trajectories, iter_requests
+from outcomes import evaluate_trajectory_outcome
 
-SMALL_TRAJECTORY = 15_000  # est. input tokens; ~40% of real trajectories fall under this
 
-def route_trajectory(calls):
-    """Baseline route: send WHOLE small trajectories to the cheap sibling, keep the rest
-    on the logged model. Whole-trajectory routing respects the one-model-per-trajectory
-    premise and never pays the cache-reset penalty for a mid-task switch."""
-    total = sum(est_tokens(c["input"]) for c in calls)
-    if total < SMALL_TRAJECTORY:
-        return [cheap_for(c["model"]) for c in calls]
-    return [c["model"] for c in calls]
+STRONG_MODELS = {"claude": "claude-opus-5", "gpt": "gpt-5.6-terra"}
+CHEAP_MODEL = "gpt-5.6-luna"
 
-def main():
+# Inspectable thresholds intended for later tuning on a held-out set.
+EXCEPTIONAL_TOOL_COUNT = 12
+EXCEPTIONAL_TOOL_TOKENS = 4_000
+SMALL_GROWTH_TOKENS = 750
+SMALL_GROWTH_RATIO = 0.10
+
+
+def _family(model: str) -> str:
+    return "claude" if model.startswith("claude") else "gpt"
+
+
+def strong_for(model: str) -> str:
+    """Return the designated capable model in the logged model's family."""
+    return STRONG_MODELS[_family(model)]
+
+
+def cheap_for(model: str) -> str:
+    """Return the globally cheapest model (argument retained for compatibility)."""
+    del model
+    return CHEAP_MODEL
+
+
+def _history_has_new_error(
+    calls: Sequence[Mapping[str, Any]], call_index: int
+) -> bool:
+    """Whether the output revealed since the preceding request has an error."""
+    if call_index <= 0:
+        return False
+    current = evaluate_trajectory_outcome(
+        pd.DataFrame.from_records(calls[: call_index + 1])
+    )
+    previous = evaluate_trajectory_outcome(
+        pd.DataFrame.from_records(calls[:call_index])
+    )
+    return int(current["error_output_count"]) > int(previous["error_output_count"])
+
+
+def build_call_features(calls: Sequence[Mapping[str, Any]]) -> pd.DataFrame:
+    """Build chronological routing features from reconstructed requests."""
+    records: list[dict[str, Any]] = []
+    previous_tokens = 0
+
+    for call_index, call in enumerate(calls):
+        prompt_tokens = est_tokens(call.get("input", []))
+        token_growth = prompt_tokens - previous_tokens if call_index else prompt_tokens
+        tools = call.get("tools", [])
+        tools_list = tools if isinstance(tools, list) else []
+        tools_count = len(tools_list)
+        tools_tokens = est_tokens(tools_list)
+        records.append(
+            {
+                "call_index": call_index,
+                "is_first_call": call_index == 0,
+                "logged_model": str(call.get("model", "gpt-5.6-terra")),
+                "prompt_tokens": prompt_tokens,
+                "prompt_token_growth": max(0, token_growth),
+                "prompt_growth_ratio": (
+                    max(0, token_growth) / previous_tokens
+                    if previous_tokens > 0
+                    else 1.0
+                ),
+                "tools_count": tools_count,
+                "tools_tokens": tools_tokens,
+                "is_tool_heavy": (
+                    tools_count >= EXCEPTIONAL_TOOL_COUNT
+                    or tools_tokens >= EXCEPTIONAL_TOOL_TOKENS
+                ),
+                "previous_call_error": _history_has_new_error(calls, call_index),
+            }
+        )
+        previous_tokens = prompt_tokens
+
+    return pd.DataFrame.from_records(records)
+
+
+def _small_prompt_growth(feature: pd.Series) -> bool:
+    return bool(
+        int(feature["prompt_token_growth"]) <= SMALL_GROWTH_TOKENS
+        or float(feature["prompt_growth_ratio"]) <= SMALL_GROWTH_RATIO
+    )
+
+
+def _switch_is_economical(
+    calls: Sequence[Mapping[str, Any]],
+    call_index: int,
+    current_model: str,
+    candidate_model: str,
+    pricing: Mapping[str, Sequence[float]],
+) -> bool:
+    """Check appended-token savings against the cache-reset penalty.
+
+    Staying bills the shared prefix at the current model's cache-read rate;
+    switching bills it at the candidate's uncached rate. A cheaper switch is
+    allowed only when savings on appended tokens strictly exceed that penalty.
+    """
+    if candidate_model == current_model or call_index == 0:
+        return True
+
+    current_uncached, current_cached, _ = price_of(current_model, pricing)
+    candidate_uncached, _, _ = price_of(candidate_model, pricing)
+    if candidate_uncached >= current_uncached:
+        # Capability upgrades are quality decisions rather than savings moves.
+        return True
+
+    call = calls[call_index]
+    input_tokens = est_tokens(call.get("input", []))
+    shared_tokens = min(
+        shared_prefix_tokens(calls[call_index - 1], call), input_tokens
+    )
+    appended_tokens = max(0, input_tokens - shared_tokens)
+    cache_reset_penalty = shared_tokens * max(
+        0.0, candidate_uncached - current_cached
+    )
+    appended_token_savings = appended_tokens * max(
+        0.0, current_uncached - candidate_uncached
+    )
+    return appended_token_savings > cache_reset_penalty
+
+
+def route_trajectory(calls: Sequence[Mapping[str, Any]]) -> list[str]:
+    """Assign a model to each call with an inspectable heuristic decision tree."""
+    if not calls:
+        return []
+
+    features = build_call_features(calls)
+    pricing = load_pricing()
+    route: list[str] = []
+
+    for row_index, feature in features.iterrows():
+        logged_model = str(feature["logged_model"])
+        if bool(feature["is_first_call"]):
+            candidate = strong_for(logged_model)
+        elif bool(feature["is_tool_heavy"]) or bool(feature["previous_call_error"]):
+            candidate = strong_for(logged_model)
+        elif int(feature["call_index"]) > 2 and _small_prompt_growth(feature):
+            candidate = CHEAP_MODEL
+        else:
+            candidate = route[-1]
+
+        if route and candidate != route[-1] and not _switch_is_economical(
+            calls,
+            int(row_index),
+            route[-1],
+            candidate,
+            pricing,
+        ):
+            candidate = route[-1]
+        route.append(candidate)
+
+    return route
+
+
+def main() -> None:
     export = sys.argv[1] if len(sys.argv) > 1 else "export"
     pricing = load_pricing()
     groups = group_trajectories(r for _, _, r in iter_requests(export))
     Path("results").mkdir(exist_ok=True)
-    out = open("results/routes.jsonl", "w")
-    tot_logged = tot_routed = 0.0
-    for key, calls in groups.items():
-        logged = logged_route(calls); routed = route_trajectory(calls)
-        c_logged, _ = trajectory_cost(calls, logged, pricing)
-        c_routed, _ = trajectory_cost(calls, routed, pricing)
-        tot_logged += c_logged; tot_routed += c_routed
-        out.write(json.dumps({"trajectory": key, "n_calls": len(calls), "logged_model": logged[0],
-                              "route": routed, "cost_logged_usd": round(c_logged, 6),
-                              "cost_routed_usd": round(c_routed, 6),
-                              "switches": sum(1 for i in range(1, len(routed)) if routed[i] != routed[i-1])}) + "\n")
-    out.close()
-    print(f"logged cost (est. input tokens, official prices):  ${tot_logged:,.4f}")
-    print(f"routed cost:  ${tot_routed:,.4f}  ({(tot_routed/tot_logged-1):+.1%}, cache-aware)")
-    print("NOTE: no outputs/usage in the export — token counts are estimates, output cost excluded,")
-    print("and this baseline has NO outcome estimate. Constructing one is the challenge.")
+
+    total_logged = 0.0
+    total_routed = 0.0
+    with Path("results/routes.jsonl").open("w", encoding="utf-8") as output:
+        for key, calls in groups.items():
+            logged = logged_route(calls)
+            routed = route_trajectory(calls)
+            logged_cost, _ = trajectory_cost(calls, logged, pricing)
+            routed_cost, _ = trajectory_cost(calls, routed, pricing)
+            total_logged += logged_cost
+            total_routed += routed_cost
+            output.write(
+                json.dumps(
+                    {
+                        "trajectory": key,
+                        "n_calls": len(calls),
+                        "logged_model": logged[0],
+                        "route": routed,
+                        "cost_logged_usd": round(logged_cost, 6),
+                        "cost_routed_usd": round(routed_cost, 6),
+                        "switches": sum(
+                            routed[i] != routed[i - 1]
+                            for i in range(1, len(routed))
+                        ),
+                    }
+                )
+                + "\n"
+            )
+
+    change = (total_routed / total_logged - 1.0) if total_logged else 0.0
+    print(f"logged cost (estimated input tokens): ${total_logged:,.4f}")
+    print(f"routed cost: ${total_routed:,.4f} ({change:+.1%}, cache-aware)")
+    print("NOTE: output cost is excluded because final outputs and usage are absent.")
     print("wrote results/routes.jsonl")
 
-if __name__ == "__main__": main()
+
+if __name__ == "__main__":
+    main()
