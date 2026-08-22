@@ -9,6 +9,7 @@ It keeps the public ``route_trajectory(calls)`` interface used by the evaluator.
 from __future__ import annotations
 
 import json
+import math
 import sys
 from pathlib import Path
 from typing import Any, Mapping, Sequence
@@ -26,14 +27,24 @@ from load_trajectories import est_tokens, group_trajectories, iter_requests
 from outcomes import evaluate_trajectory_outcome
 
 
-STRONG_MODELS = {"claude": "claude-opus-5", "gpt": "gpt-5.6-terra"}
-CHEAP_MODEL = "gpt-5.6-luna"
+MODEL_TIERS = {
+    "claude": {
+        "strong": "claude-opus-5",
+        "mid": "claude-sonnet-5",
+        # There is no low-cost Claude tier in the supplied price schedule.
+        "cheap": "gpt-5.6-luna",
+    },
+    "gpt": {
+        "strong": "gpt-5.6-sol",
+        "mid": "gpt-5.6-terra",
+        "cheap": "gpt-5.6-luna",
+    },
+}
 
-# Inspectable thresholds intended for later tuning on a held-out set.
-EXCEPTIONAL_TOOL_COUNT = 12
-EXCEPTIONAL_TOOL_TOKENS = 4_000
-SMALL_GROWTH_TOKENS = 750
-SMALL_GROWTH_RATIO = 0.10
+PROMPT_SIZE_ANCHOR = 20_000
+TOKEN_GROWTH_ANCHOR = 2_000
+TOOL_RATIO_ANCHOR = 0.25
+DEFAULT_AGGRESSIVENESS = 0.5
 
 
 def _family(model: str) -> str:
@@ -42,13 +53,17 @@ def _family(model: str) -> str:
 
 def strong_for(model: str) -> str:
     """Return the designated capable model in the logged model's family."""
-    return STRONG_MODELS[_family(model)]
+    return MODEL_TIERS[_family(model)]["strong"]
+
+
+def mid_for(model: str) -> str:
+    """Return the balanced model in the logged model's family."""
+    return MODEL_TIERS[_family(model)]["mid"]
 
 
 def cheap_for(model: str) -> str:
-    """Return the globally cheapest model (argument retained for compatibility)."""
-    del model
-    return CHEAP_MODEL
+    """Return the economical tier associated with the logged family."""
+    return MODEL_TIERS[_family(model)]["cheap"]
 
 
 def _history_has_new_error(
@@ -78,6 +93,24 @@ def build_call_features(calls: Sequence[Mapping[str, Any]]) -> pd.DataFrame:
         tools_list = tools if isinstance(tools, list) else []
         tools_count = len(tools_list)
         tools_tokens = est_tokens(tools_list)
+        total_context_tokens = prompt_tokens + tools_tokens
+        tool_token_ratio = (
+            tools_tokens / total_context_tokens if total_context_tokens else 0.0
+        )
+        size_score = min(
+            1.0, math.log1p(prompt_tokens) / math.log1p(PROMPT_SIZE_ANCHOR)
+        )
+        growth_score = min(1.0, max(0, token_growth) / TOKEN_GROWTH_ANCHOR)
+        tool_score = min(1.0, tool_token_ratio / TOOL_RATIO_ANCHOR)
+        previous_call_error = _history_has_new_error(calls, call_index)
+        # Growth and tool density dominate because they are the strongest
+        # online signals that a continuation requires fresh reasoning.
+        complexity_score = min(
+            1.0,
+            0.15 * size_score + 0.50 * growth_score + 0.35 * tool_score,
+        )
+        if previous_call_error:
+            complexity_score = 1.0
         records.append(
             {
                 "call_index": call_index,
@@ -92,11 +125,12 @@ def build_call_features(calls: Sequence[Mapping[str, Any]]) -> pd.DataFrame:
                 ),
                 "tools_count": tools_count,
                 "tools_tokens": tools_tokens,
-                "is_tool_heavy": (
-                    tools_count >= EXCEPTIONAL_TOOL_COUNT
-                    or tools_tokens >= EXCEPTIONAL_TOOL_TOKENS
-                ),
-                "previous_call_error": _history_has_new_error(calls, call_index),
+                "tool_token_ratio": tool_token_ratio,
+                "size_score": size_score,
+                "growth_score": growth_score,
+                "tool_score": tool_score,
+                "complexity_score": complexity_score,
+                "previous_call_error": previous_call_error,
             }
         )
         previous_tokens = prompt_tokens
@@ -104,11 +138,15 @@ def build_call_features(calls: Sequence[Mapping[str, Any]]) -> pd.DataFrame:
     return pd.DataFrame.from_records(records)
 
 
-def _small_prompt_growth(feature: pd.Series) -> bool:
-    return bool(
-        int(feature["prompt_token_growth"]) <= SMALL_GROWTH_TOKENS
-        or float(feature["prompt_growth_ratio"]) <= SMALL_GROWTH_RATIO
-    )
+def _tier_for_score(score: float, aggressiveness: float) -> str:
+    """Map continuous utility to a tier with smoothly moving boundaries."""
+    cheap_threshold = 0.12 + 0.58 * aggressiveness
+    strong_threshold = 0.52 + 0.43 * aggressiveness
+    if score < cheap_threshold:
+        return "cheap"
+    if score < strong_threshold:
+        return "mid"
+    return "strong"
 
 
 def _switch_is_economical(
@@ -148,26 +186,22 @@ def _switch_is_economical(
     return appended_token_savings > cache_reset_penalty
 
 
-def route_trajectory(calls: Sequence[Mapping[str, Any]]) -> list[str]:
-    """Assign a model to each call with an inspectable heuristic decision tree."""
-    if not calls:
-        return []
-
-    features = build_call_features(calls)
-    pricing = load_pricing()
+def _route_at_level(
+    calls: Sequence[Mapping[str, Any]],
+    features: pd.DataFrame,
+    aggressiveness: float,
+    pricing: Mapping[str, Sequence[float]],
+) -> list[str]:
+    """Build a route at one exact point on the utility sweep."""
     route: list[str] = []
 
     for row_index, feature in features.iterrows():
         logged_model = str(feature["logged_model"])
-        if bool(feature["is_first_call"]):
-            candidate = strong_for(logged_model)
-        elif bool(feature["is_tool_heavy"]) or bool(feature["previous_call_error"]):
-            candidate = strong_for(logged_model)
-        elif int(feature["call_index"]) > 2 and _small_prompt_growth(feature):
-            candidate = CHEAP_MODEL
-        else:
-            candidate = route[-1]
+        tier = _tier_for_score(float(feature["complexity_score"]), aggressiveness)
+        candidate = MODEL_TIERS[_family(logged_model)][tier]
 
+        # Every downward switch must pay for its inferred cache reset using
+        # strictly larger marginal input savings. Upgrades remain quality-led.
         if route and candidate != route[-1] and not _switch_is_economical(
             calls,
             int(row_index),
@@ -179,6 +213,48 @@ def route_trajectory(calls: Sequence[Mapping[str, Any]]) -> list[str]:
         route.append(candidate)
 
     return route
+
+
+def _sweep_levels(features: pd.DataFrame, aggressiveness: float) -> list[float]:
+    """Return all decision breakpoints up to the requested sweep position."""
+    levels = {0.0, aggressiveness}
+    for score in features["complexity_score"].astype(float):
+        for breakpoint in ((score - 0.12) / 0.58, (score - 0.52) / 0.43):
+            if 0.0 < breakpoint <= aggressiveness:
+                levels.add(min(aggressiveness, breakpoint + 1e-9))
+    return sorted(levels)
+
+
+def route_trajectory(
+    calls: Sequence[Mapping[str, Any]],
+    aggressiveness: float = DEFAULT_AGGRESSIVENESS,
+) -> list[str]:
+    """Route calls using continuous utility and a monotone cost envelope.
+
+    Higher aggressiveness admits progressively more downgrade candidates. At
+    every decision breakpoint, the complete cache-aware trajectory cost is
+    evaluated. Returning the cheapest route admitted so far guarantees that
+    cost can never rise as aggressiveness increases.
+    """
+    if not calls:
+        return []
+    if not 0.0 <= aggressiveness <= 1.0:
+        raise ValueError("aggressiveness must be between 0.0 and 1.0")
+
+    features = build_call_features(calls)
+    pricing = load_pricing()
+    best_route: list[str] | None = None
+    best_cost = math.inf
+
+    for level in _sweep_levels(features, aggressiveness):
+        candidate = _route_at_level(calls, features, level, pricing)
+        candidate_cost, _ = trajectory_cost(calls, candidate, pricing)
+        if candidate_cost < best_cost:
+            best_cost = candidate_cost
+            best_route = candidate
+
+    assert best_route is not None
+    return best_route
 
 
 def main() -> None:
