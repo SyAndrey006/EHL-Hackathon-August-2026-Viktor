@@ -1,0 +1,70 @@
+{
+  "cli_version": "0.10.2",
+  "checkpoint_id": "01M0NKZN7Z3GPJ60RXWWNSC833",
+  "session_id": "01a02af1-9215-76f3-83ed-0129be8ca116",
+  "strategy": "manual-commit",
+  "created_at": "2026-08-22T20:53:20.587078Z",
+  "branch": "Festure-ConfidenceRouter-kinda",
+  "checkpoints_count": 3,
+  "save_step_count": 3,
+  "files_touched": [
+    "viktor-tumai-starter/scripts/confidence_router.py",
+    "viktor-tumai-starter/scripts/learned_router.py",
+    "viktor-tumai-starter/scripts/outcome_signal.py"
+  ],
+  "agent": "Codex",
+  "model": "gpt-5.6-terra",
+  "turn_id": "c6868e951d88",
+  "compact_transcript_start": 0,
+  "token_usage": {
+    "input_tokens": 53305,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 626944,
+    "output_tokens": 16759,
+    "api_call_count": 19
+  },
+  "session_metrics": {
+    "turn_count": 3
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-08-22T20:53:20.4943384Z",
+    "agent_lines": 653,
+    "agent_removed": 0,
+    "human_added": 71,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 724,
+    "total_lines_changed": 769,
+    "agent_percentage": 84.91547464239272,
+    "metric_version": 2
+  },
+  "prompt_attributions": [
+    {
+      "checkpoint_number": 1,
+      "user_lines_added": 56,
+      "user_lines_removed": 56,
+      "agent_lines_added": 0,
+      "agent_lines_removed": 0,
+      "user_added_per_file": {
+        "viktor-tumai-starter/scripts/baseline_router.py": 56
+      },
+      "user_removed_per_file": {
+        "viktor-tumai-starter/scripts/baseline_router.py": 56
+      }
+    },
+    {
+      "checkpoint_number": 2,
+      "user_lines_added": 0,
+      "user_lines_removed": 0,
+      "agent_lines_added": 0,
+      "agent_lines_removed": 0
+    },
+    {
+      "checkpoint_number": 3,
+      "user_lines_added": 0,
+      "user_lines_removed": 0,
+      "agent_lines_added": 322,
+      "agent_lines_removed": 0
+    }
+  ]
+}
