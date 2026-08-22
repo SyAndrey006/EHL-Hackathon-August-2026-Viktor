@@ -1,0 +1,2 @@
+Download and extract this zip: https://272cf1727f29a8ae220656f37cff6767.r2.cloudflarestorage.com/viktor-tumai/starter/viktor-tumai-starter.zip?X-Amz-Algorithm=AWS4-HMAC-SHA256&REDACTED%2F20260822%2Fauto%2Fs3%2Faws4_request&X-Amz-Date=20260822T045058Z&X-Amz-Expires=234481&X-Amz-SignedHeaders=host&REDACTED&X-Amz-Signature=532bde8bdd1e214e43c80c95db74293cb432b37783d7981d9a43492fd364e2c8
+Read AGENTS.md, then follow skills/setup/SKILL.md end to end: download the dataset, run the sanity checks and the baseline router, and report the baseline cost delta.
