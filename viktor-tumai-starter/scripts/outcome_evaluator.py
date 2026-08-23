@@ -1,227 +1,155 @@
 #!/usr/bin/env python3
-"""Detect task completion and estimate matched off-policy route quality.
-
-The estimator is observational, not proof of counterfactual success. It matches the
-logged trajectory-level treatment on early features, uses Beta(1,1) smoothing, and
-backs off to coarser strata when exact cells are sparse.
-"""
-from __future__ import annotations
-
+"""Completion labels plus CEM-based off-policy quality evaluation."""
 import argparse, csv, json, math, re, sys
 from collections import Counter, defaultdict
 from pathlib import Path
-from typing import Any
 
-SCRIPT_DIR = Path(__file__).resolve().parent
-ROOT = SCRIPT_DIR.parent
-sys.path.insert(0, str(SCRIPT_DIR))
+HERE = Path(__file__).resolve().parent; ROOT = HERE.parent
+sys.path.insert(0, str(HERE))
 from load_trajectories import group_trajectories, iter_requests
+from cost_model import load_pricing, price_of, shared_prefix_tokens, trajectory_cost
 
-POSITIVE = re.compile(
-    r"\b(success(?:ful(?:ly)?)?|completed?|done|finished|verified|passed|resolved|"
-    r"created|updated|moved|fixed|deployed|saved|sent|all tests? pass(?:ed)?)\b", re.I)
-NEGATIVE = re.compile(
-    r"\b(fail(?:ed|ure)?|error|exception|unable|cannot|can't|incomplete|not completed|"
-    r"not verified|timed? out|timeout|blocked|aborted|permission denied)\b", re.I)
-CHEAP_MODELS = {"gpt-5.6-luna", "claude-sonnet-5"}
-PREMIUM_HINTS = ("fable", "opus", "gpt-5.6-sol")
-MIN_SUPPORT = 5
-_STATE: dict[str, Any] | None = None
+CHEAP = {"gpt-5.6-luna", "claude-sonnet-5"}
+PREMIUM = ("fable", "opus", "gpt-5.6-sol")
+POS = re.compile(r"\b(success|successful|completed?|done|finished|verified|passed|resolved|created|updated|moved|fixed|saved|sent)\b", re.I)
+NEG = re.compile(r"\b(fail|failed|failure|error|exception|unable|cannot|incomplete|timeout|blocked|aborted|permission denied)\b", re.I)
+_STATE = None
 
 
-def item_type(item):
-    return item.get("type", "message")
-
-
-def message_text(item):
-    content = item.get("content", "")
-    if isinstance(content, str):
-        return content
-    if not isinstance(content, list):
-        return ""
-    return " ".join(str(p.get("text", "")) for p in content
-                    if isinstance(p, dict) and p.get("type") in {"input_text", "output_text", "text"})
-
-
-def terminal_evidence(calls):
-    """Last observable assistant message or function result in the final request."""
-    for item in reversed(calls[-1]["input"]):
-        if item.get("role") == "assistant":
-            return "assistant", message_text(item)
-        if item_type(item) in {"function_call_output", "custom_tool_call_output"}:
-            value = item.get("output", "")
-            return "tool_output", value if isinstance(value, str) else json.dumps(value, ensure_ascii=False)
-    return "none", ""
-
-
-def detect_success(calls):
-    """Conservative binary heuristic; negative terminal evidence takes precedence."""
-    _, text = terminal_evidence(calls)
-    if not text.strip() or NEGATIVE.search(text):
-        return False
-    if POSITIVE.search(text):
-        return True
-    lowered = text.lower()
-    return bool(re.search(r'"(?:success|ok)"\s*:\s*true', lowered)
-                or re.search(r'"(?:exit_?code|return_?code)"\s*:\s*0\b', lowered))
-
-
-def build_outcomes(export_dir):
-    groups = group_trajectories(req for _, _, req in iter_requests(export_dir))
-    return {tid: {"logged_model": calls[0]["model"], "success": detect_success(calls)}
-            for tid, calls in groups.items()}
-
-
-def model_tier(model):
-    if model in CHEAP_MODELS:
-        return "cheap"
-    if any(hint in model for hint in PREMIUM_HINTS):
-        return "premium"
+def tier(model):
+    if model in CHEAP: return "cheap"
+    if any(x in model for x in PREMIUM): return "premium"
     return "standard"
 
 
-def model_family(model):
-    return "claude" if model.startswith("claude") else ("gpt" if model.startswith("gpt") else "other")
+def text(item):
+    value = item.get("output", item.get("content", ""))
+    if isinstance(value, str): return value
+    if isinstance(value, list): return " ".join(str(p.get("text", "")) for p in value if isinstance(p, dict))
+    return json.dumps(value, ensure_ascii=False)
 
 
-def length_bucket(n):
-    return "short" if n <= 3 else ("medium" if n <= 6 else "long")
+def terminal(calls):
+    for item in reversed(calls[-1]["input"]):
+        if item.get("role") == "assistant" or item.get("type") in {"function_call_output", "custom_tool_call_output"}:
+            return text(item)
+    return ""
 
 
-def load_early_features(path):
-    features = {}
-    with Path(path).open(newline="", encoding="utf-8") as handle:
-        for row in csv.DictReader(handle):
+def success(calls):
+    value = terminal(calls)
+    if not value or NEG.search(value): return False
+    return bool(POS.search(value) or re.search(r'"(?:ok|success)"\s*:\s*true|"(?:exit_?code|return_?code)"\s*:\s*0', value, re.I))
+
+
+def build_outcomes(export):
+    groups = group_trajectories(r for _, _, r in iter_requests(export))
+    return {k: {"logged_model": v[0]["model"], "success": success(v)} for k, v in groups.items()}
+
+
+def bucket(n): return "short" if n <= 3 else ("medium" if n <= 6 else "long")
+
+
+def early_features(path):
+    result = {}
+    with open(path, newline="", encoding="utf-8") as f:
+        for row in csv.DictReader(f):
             if int(row["call_index"]) == 1:
-                n = int(row["trajectory_calls"])
-                features[row["trajectory"]] = {
-                    "task_category": row["task_category"],
-                    "has_input_image": int(row["has_input_image"]),
-                    "has_reasoning": int(row["has_reasoning"]),
-                    "trajectory_calls": n,
-                    "length_bucket": length_bucket(n),
-                }
-    return features
+                result[row["trajectory"]] = (row["task_category"], int(row["has_input_image"]), bucket(int(row["trajectory_calls"])))
+    return result
 
 
-def _make_state(outcomes_path, features_path):
-    outcomes = json.loads(Path(outcomes_path).read_text(encoding="utf-8"))
-    features = load_early_features(features_path)
-    observations = []
-    for tid, outcome in outcomes.items():
-        if tid in features:
-            observations.append({"trajectory": tid, "success": int(outcome["success"]),
-                                 "model": outcome["logged_model"],
-                                 "tier": model_tier(outcome["logged_model"]), **features[tid]})
-    return {"outcomes": outcomes, "features": features, "observations": observations}
-
-
-def configure_estimator(outcomes_path=ROOT / "results" / "outcomes.json",
-                        features_path=ROOT / "results" / "call_features.csv"):
+def configure_estimator(outcomes_path=ROOT/"results/outcomes.json", features_path=ROOT/"results/call_features.csv"):
     global _STATE
-    _STATE = _make_state(outcomes_path, features_path)
+    outcomes = json.loads(Path(outcomes_path).read_text(encoding="utf-8")); features = early_features(features_path)
+    obs = [{"id": k, "model": v["logged_model"], "tier": tier(v["logged_model"]),
+            "success": int(v["success"]), "stratum": features[k]} for k, v in outcomes.items() if k in features]
+    strata = defaultdict(list)
+    for o in obs: strata[o["stratum"]].append(o)
+    overlap = {s for s, rows in strata.items() if {"cheap", "premium"} <= {r["tier"] for r in rows}}
+    # ATE CEM weights: each treatment tier receives half of each overlapping stratum.
+    weighted = []
+    for s in overlap:
+        rows = [r for r in strata[s] if r["tier"] in {"cheap", "premium"}]
+        counts = Counter(r["tier"] for r in rows); total = len(rows)
+        for r in rows:
+            weighted.append((r, total / (2 * counts[r["tier"]])))
+    _STATE = {"outcomes": outcomes, "features": features, "obs": obs, "strata": strata,
+              "overlap": overlap, "weighted": weighted}
 
 
-def _state():
-    global _STATE
-    if _STATE is None:
-        configure_estimator()
+def state():
+    if _STATE is None: configure_estimator()
     return _STATE
 
 
-def _matched_rate(trajectory_id, tier):
-    state, target = _state(), _state()["features"].get(trajectory_id)
-    levels = [
-        ("exact", ("task_category", "has_input_image", "has_reasoning", "length_bucket")),
-        ("drop_length", ("task_category", "has_input_image", "has_reasoning")),
-        ("category_image", ("task_category", "has_input_image")),
-        ("category", ("task_category",)),
-        ("tier_global", ()),
-    ]
-    if target is None:
-        levels = [("tier_global", ())]
-    fallback = None
-    for level, fields in levels:
-        values = [o["success"] for o in state["observations"]
-                  if o["tier"] == tier and (target is None or all(o[f] == target[f] for f in fields))]
-        candidate = ((sum(values) + 1) / (len(values) + 2), len(values), level) if values else None
-        fallback = fallback or candidate
-        if len(values) >= MIN_SUPPORT or level == "tier_global":
-            return candidate or fallback or (0.5, 0, "no_support")
-    return fallback or (0.5, 0, "no_support")
+def cem_diagnostics():
+    s = state(); weights = [w for _, w in s["weighted"]]
+    ess = (sum(weights)**2 / sum(w*w for w in weights)) if weights else 0.0
+    usable = sum(len(s["strata"][x]) for x in s["overlap"])
+    return {"strata_total": len(s["strata"]), "strata_overlap": len(s["overlap"]),
+            "trajectories_total": len(s["obs"]), "trajectories_overlap": usable, "ess": ess}
+
+
+def cem_rate(target_tier, stratum=None):
+    s = state()
+    exact = [r["success"] for r in s["strata"].get(stratum, []) if r["tier"] == target_tier] if stratum in s["overlap"] else []
+    if exact: return (sum(exact)+1)/(len(exact)+2), len(exact), "exact_cem"
+    rows = [(r, w) for r, w in s["weighted"] if r["tier"] == target_tier]
+    if rows:
+        return (sum(r["success"]*w for r,w in rows)+1)/(sum(w for _,w in rows)+2), len(rows), "weighted_cem"
+    raw = [r["success"] for r in s["obs"] if r["tier"] == target_tier]
+    return ((sum(raw)+1)/(len(raw)+2) if raw else .5), len(raw), "unmatched_fallback"
 
 
 def estimate_route_quality(trajectory_id, proposed_route):
-    """Expected trajectory success in [0,1]; mixed routes are an exploratory blend."""
-    state = _state()
-    if not proposed_route:
-        return 0.5
-    outcome = state["outcomes"].get(trajectory_id)
-    if outcome and all(m == outcome["logged_model"] for m in proposed_route):
-        return float(outcome["success"])
-    rates = [_matched_rate(trajectory_id, model_tier(model))[0] for model in proposed_route]
-    return max(0.0, min(1.0, math.exp(sum(math.log(max(r, 1e-9)) for r in rates) / len(rates))))
+    s = state(); outcome = s["outcomes"].get(trajectory_id)
+    if not proposed_route: return .5
+    if outcome and all(m == outcome["logged_model"] for m in proposed_route): return float(outcome["success"])
+    rates = [cem_rate(tier(m), s["features"].get(trajectory_id))[0] for m in proposed_route]
+    return math.exp(sum(math.log(max(1e-9, r)) for r in rates)/len(rates))
 
 
-def wilson(successes, total, z=1.96):
-    if not total:
-        return 0.0, 1.0
-    p, den = successes / total, 1 + z*z/total
-    center = (p + z*z/(2*total)) / den
-    half = z * math.sqrt(p*(1-p)/total + z*z/(4*total*total)) / den
-    return center-half, center+half
+def wilson_interval(expected_successes, n, z=1.96):
+    """Wilson interval using fractional expected successes (model-based approximation)."""
+    if not n: return 0.0, 1.0
+    p = expected_successes/n; d = 1+z*z/n
+    c = (p+z*z/(2*n))/d; h = z*math.sqrt(p*(1-p)/n+z*z/(4*n*n))/d
+    return max(0,c-h), min(1,c+h)
 
 
-def print_summary(state):
-    obs, cells = state["observations"], defaultdict(Counter)
-    successes = sum(o["success"] for o in obs)
-    print("\n=== Task completion and matched-treatment summary ===")
-    print(f"trajectories={len(obs)}  detected_success={successes} ({successes/max(1,len(obs)):.1%})")
-    print("\nObserved success by model tier (95% Wilson interval; not causal):")
-    for tier in ("cheap", "standard", "premium"):
-        rows = [o for o in obs if o["tier"] == tier]
-        s, n = sum(o["success"] for o in rows), len(rows)
-        lo, hi = wilson(s, n)
-        print(f"  {tier:8s} {s}/{n} = {s/max(1,n):.1%}  CI [{lo:.1%}, {hi:.1%}]")
-    print("\nObserved success by provider family and logged model:")
-    for label, selector in (
-        *[(family, lambda o, family=family: model_family(o["model"]) == family)
-          for family in sorted({model_family(o["model"]) for o in obs})],
-        *[(model, lambda o, model=model: o["model"] == model)
-          for model in sorted({o["model"] for o in obs})],
-    ):
-        rows = [o for o in obs if selector(o)]
-        s, n = sum(o["success"] for o in rows), len(rows)
-        print(f"  {label:20s} {s}/{n} = {s/max(1,n):.1%}")
-    for row in obs:
-        cells[(row["task_category"], row["has_input_image"],
-               row["has_reasoning"], row["length_bucket"])][row["tier"]] += 1
-    overlap = [(k, c) for k, c in cells.items() if c["cheap"] >= MIN_SUPPORT and c["premium"] >= MIN_SUPPORT]
-    print(f"\nExact matched cells with >= {MIN_SUPPORT} cheap AND premium trajectories: {len(overlap)}/{len(cells)}")
-    for key, counts in sorted(cells.items()):
-        usable = counts["cheap"] >= MIN_SUPPORT and counts["premium"] >= MIN_SUPPORT
-        print(f"  {key}: cheap={counts['cheap']} premium={counts['premium']} "
-              f"standard={counts['standard']}  {'usable' if usable else 'SPARSE'}")
-    if len(overlap) < len(cells):
-        print("WARNING: sparse cells lack common support; estimates back off to coarser")
-        print("strata and then tier-wide rates. Wide intervals preclude a confident 95% claim.")
-    print("CAUSAL WARNING: recorded-feature matching cannot remove assignment confounding,")
-    print("completion-label error, or unobserved mixed-route interactions.")
+def gamma_to_flip(candidate, comparator):
+    """Odds-ratio sensitivity: Gamma needed to reduce candidate to comparator."""
+    if candidate <= comparator: return 1.0
+    odds_c = candidate/max(1e-9, 1-candidate); odds_b = comparator/max(1e-9, 1-comparator)
+    return max(1.0, odds_c/max(1e-9, odds_b))
+
+
+def cache_repricing_sanity(export):
+    pricing = load_pricing(); groups = group_trajectories(r for _,_,r in iter_requests(export)); checked = 0
+    for calls in groups.values():
+        model = calls[0]["model"]; route = [model]*len(calls)
+        actual, uncached = trajectory_cost(calls, route, pricing)
+        expected_u = expected_usd = 0.0
+        for i, call in enumerate(calls):
+            from load_trajectories import est_tokens
+            inp = est_tokens(call["input"]); cached = 0 if i == 0 else min(inp, shared_prefix_tokens(calls[i-1], call))
+            u = inp-cached; pu, pc, _ = price_of(model, pricing)
+            expected_u += u; expected_usd += (u*pu+cached*pc)/1e6
+        assert uncached == expected_u and abs(actual-expected_usd) < 1e-12
+        checked += 1
+    return checked
+
+
+def report():
+    d=cem_diagnostics(); print(f"CEM strata overlap={d['strata_overlap']}/{d['strata_total']} trajectories={d['trajectories_overlap']}/{d['trajectories_total']} ESS={d['ess']:.2f}")
+    for t in ("cheap","premium"): print(f"CEM {t} rate={cem_rate(t)[0]:.3f} support={cem_rate(t)[1]} source={cem_rate(t)[2]}")
+    print("FAILURE BOUNDS: sparse overlap, observational assignment confounding, heuristic terminal-label noise.")
 
 
 def main():
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("export", nargs="?", default="export")
-    parser.add_argument("features", nargs="?", default="results/call_features.csv")
-    parser.add_argument("--output", default="results/outcomes.json")
-    args = parser.parse_args()
-    outcomes, output = build_outcomes(args.export), Path(args.output)
-    output.parent.mkdir(parents=True, exist_ok=True)
-    output.write_text(json.dumps(outcomes, indent=2, sort_keys=True), encoding="utf-8")
-    configure_estimator(output, args.features)
-    print_summary(_state())
-    print(f"\nWrote {output}")
+    p=argparse.ArgumentParser(); p.add_argument("export",nargs="?",default="export"); p.add_argument("features",nargs="?",default="results/call_features.csv"); p.add_argument("--output",default="results/outcomes.json"); a=p.parse_args()
+    out=build_outcomes(a.export); Path(a.output).write_text(json.dumps(out,indent=2,sort_keys=True),encoding="utf-8")
+    configure_estimator(a.output,a.features); report(); print(f"cache repricing sanity: PASS ({cache_repricing_sanity(a.export)} constant-model trajectories)"); print(f"wrote {a.output}")
 
-
-if __name__ == "__main__":
-    main()
+if __name__ == "__main__": main()
