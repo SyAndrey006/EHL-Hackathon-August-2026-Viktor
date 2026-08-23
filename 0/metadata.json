@@ -1,0 +1,40 @@
+{
+  "cli_version": "0.10.2",
+  "checkpoint_id": "01M0PQDDKZMD00EBSSXB0HBJ0Y",
+  "session_id": "01a02d1d-9536-7cf0-b862-db2191976cc4",
+  "strategy": "manual-commit",
+  "created_at": "2026-08-23T07:12:32.0271489Z",
+  "branch": "feature-TrySoloCodex",
+  "checkpoints_count": 2,
+  "save_step_count": 1,
+  "files_touched": [
+    "viktor-tumai-starter/scripts/plot_frontier_2.py",
+    "viktor-tumai-starter/scripts/smart_router.py"
+  ],
+  "agent": "Codex",
+  "model": "gpt-5.6-sol",
+  "turn_id": "a1c4b9054d79",
+  "compact_transcript_start": 0,
+  "token_usage": {
+    "input_tokens": 135192,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 1737287,
+    "output_tokens": 29258,
+    "api_call_count": 43
+  },
+  "session_metrics": {
+    "turn_count": 3
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-08-23T07:12:31.9276427Z",
+    "agent_lines": 234,
+    "agent_removed": 0,
+    "human_added": 0,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 234,
+    "total_lines_changed": 234,
+    "agent_percentage": 100,
+    "metric_version": 2
+  }
+}
