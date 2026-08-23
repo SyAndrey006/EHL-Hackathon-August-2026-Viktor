@@ -56,6 +56,7 @@
   .dark td{color:var(--paper);border-bottom-color:rgba(251,250,255,.16)}
   .dark tr.smart td{color:var(--paper);font-weight:800;background:rgba(255,189,158,.18);border-top:2px solid var(--peach);border-bottom:2px solid var(--peach)}
   .threshold-note{font-size:clamp(12px,.92vw,17px);color:rgba(251,250,255,.76);margin-top:1.2vh}
+  .compact-table th,.compact-table td{font-size:clamp(13px,1.05vw,19px);padding:.9vh .65vw}
   .close{display:grid;grid-template-columns:1.25fr .75fr;gap:5vw;align-items:center}
   .next{border-left:4px solid var(--peach);padding-left:1.8vw}
   .next code{font-size:clamp(14px,1.15vw,20px);background:rgba(255,189,158,.15);padding:.28em .5em;border-radius:6px;word-break:break-word}
@@ -104,19 +105,19 @@
 
 <section class="slide" aria-label="Cost quality frontier">
   <div class="kicker">The one chart</div>
-  <h2>Cost–quality frontier <span style="font-size:.45em;font-weight:500">cache-aware estimated input</span></h2>
+  <h2>All required policies <span style="font-size:.45em;font-weight:500">one cache-aware estimator</span></h2>
   <div class="chart-layout">
     <figure class="chart-frame">
-      <img src="results/policy_comparison.svg" alt="Comparison of Logged Control, Viktor Heuristic and Smart Router by cache-aware cost and expected quality">
+      <img src="results/required_baselines.svg" alt="Comparison of observed, always cheapest, always strongest, random at matched cost, Viktor heuristic and Smart Router policies">
     </figure>
     <div class="takeaway">
-      <h3>Empirical knee</h3>
-      <div class="number">0.833 quality</div>
-      <p>Smart routing costs <b>$0.1126</b>: 55.4% below logged and $0.0169 above the length baseline.</p>
-      <p style="margin-top:1.5vh"><b>Why pay $0.0169?</b><br>Expected success rises from 0.820 to 0.833: <b>101.6% quality retention</b> versus baseline.</p>
+      <h3>Honest negative result</h3>
+      <div class="number">Random: 0.841</div>
+      <p>At essentially Smart’s cost, random routing scores <b>0.841</b> versus Smart’s <b>0.833</b>.</p>
+      <p style="margin-top:1.5vh"><b>What still worked?</b><br>The Call-1 policy is cache-safe and interpretable—but this sample does not prove its signal beats chance.</p>
     </div>
   </div>
-  <div class="foot"><span>Source: results/frontier_2.csv · gate ≥ 0.75 routes the whole task cheaply</span><span>3 / 5</span></div>
+  <div class="foot"><span>Source: results/required_baselines.csv · 95% Wilson intervals</span><span>3 / 5</span></div>
 </section>
 
 <section class="slide" aria-label="Off-policy rigor and weakness">
@@ -144,11 +145,14 @@
   <div class="close">
     <div>
       <h2 style="color:var(--paper)">15/25 tasks moved to cheaper models. None switched mid-task.</h2>
-      <table>
+      <table class="compact-table">
         <thead><tr><th>Policy</th><th>Cost</th><th>Saving</th><th>Quality</th></tr></thead>
         <tbody>
-          <tr><td>Logged</td><td>$0.2524</td><td>—</td><td>0.833 ref.</td></tr>
-          <tr><td>Baseline</td><td>$0.0957</td><td>62.1%</td><td>0.820</td></tr>
+          <tr><td>Observed / logged</td><td>$0.2524</td><td>—</td><td>1.000 observed</td></tr>
+          <tr><td>Always cheapest</td><td>$0.0604</td><td>76.1%</td><td>0.780</td></tr>
+          <tr><td>Always strongest</td><td>$0.4324</td><td>−71.3%</td><td>0.861</td></tr>
+          <tr><td>Random @ Smart cost</td><td>$0.1125</td><td>55.4%</td><td>0.841</td></tr>
+          <tr><td>Viktor length rule</td><td>$0.0957</td><td>62.1%</td><td>0.820</td></tr>
           <tr class="smart"><td>Smart router*</td><td>$0.1126</td><td>55.4%</td><td>0.833</td></tr>
         </tbody>
       </table>
@@ -156,7 +160,7 @@
     </div>
     <div class="next">
       <h3 style="color:var(--peach)">Next step to live deployment</h3>
-      <p>Remove trajectory-length calibration from the live gate, use only Call-1-known inputs, then log verified outcomes and recalibrate as support grows.</p>
+      <p>Remove trajectory-length calibration, evaluate on a fixed held-out split, and show that the Call-1 signal beats random routing at matched cost.</p>
       <p style="margin-top:2.5vh"><code>python scripts/smart_router.py &lt;export_dir&gt;</code></p>
       <p style="margin-top:2.5vh;color:var(--peach);font-weight:800">55.4% less input cost · 0 switches</p>
     </div>
