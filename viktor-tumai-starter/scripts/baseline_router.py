@@ -8,6 +8,7 @@ Usage: python scripts/baseline_router.py export/   -> writes results/routes.json
 """
 import json, sys
 from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 from load_trajectories import iter_requests, group_trajectories, est_tokens
 from cost_model import trajectory_cost, logged_route, load_pricing
 
