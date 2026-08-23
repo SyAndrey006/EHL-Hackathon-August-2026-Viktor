@@ -1,0 +1,28 @@
+Here is a highly optimized, structured prompt you can copy and paste directly into your coding AI agent (like Cursor, Claude Code, or Copilot). It gives the agent the exact context, constraints, and actionable steps needed to engineer these routing signals effectively.
+ Copy-Paste This Prompt Into Your AI Agent
+
+Context: We are competing in the Viktor Hackathon. Our task is to build a cost-aware LLM router for multi-step agent trajectories. The data has no quality labels and no usage stats, and we must navigate the "cache trap" (switching models mid-trajectory resets the cache discount, costing us full price for the shared prefix).
+
+Your Objective: Design the routing signal. I need you to analyze the trajectory data and identify nameable structures and features that strongly predict whether a cheaper model (like claude-sonnet-5 or gpt-5.6-luna) would suffice for a specific call, rather than the expensive logged model.
+
+Step 1: Feature Extraction Script
+Create a new Python script named feature_analyzer.py. Use the existing load_trajectories.py to load the data (either the synthetic sample or real export). For every call in every trajectory, extract the following features into a structured format (like a Pandas DataFrame):
+
+    Prompt Length: Use est_tokens() to get the current input size.
+
+    Trajectory Position: The index of the current call (e.g., call 2 of 8) and whether it is the opening prompt, a middle reasoning step, or the final verification step.
+
+    Tool Complexity: The number of tools provided, the length of the tool schemas, and the volume of function_call_output text in the recent history.
+
+    Modality & Reasoning: Boolean flags for whether input_image items or reasoning blocks are present in the current input history.
+
+    System Prompt/Task Type: Hashed or categorized grouping of the initial system or user task text to see if certain tasks are inherently easier.
+
+Step 2: Define a Complexity Proxy
+Since we lack a ground-truth "quality" label, we need a proxy for how "hard" a call was. Implement logic to measure the complexity of the subsequent action taken by the logged model (e.g., the length/complexity of the shell command it generated, or if it immediately returned a final "assistant" message). Use this to cluster calls into "simple tasks" vs. "heavy lifting."
+
+Step 3: Analyze and Report
+Run the extraction on the available export/ directory. Print a summary report to the terminal identifying which features have the strongest correlation with "simple" calls.
+
+Step 4: Propose the Policy
+Based on your analysis, propose three specific, rule-based routing heuristics that consider both the feature signals and the cache penalty. (Keep in mind: switching back and forth is bad; routing early small calls or whole simple trajectories is safer).
