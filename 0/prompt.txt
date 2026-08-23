@@ -1,0 +1,291 @@
+Context: We are competing in the Viktor Hackathon, building a model router for multi-step agent trajectories. In Step 1, we successfully created feature_analyzer.py and generated results/call_features.csv, which gives us predictors (reasoning presence, position, trajectory length) and an action-shape proxy (proxy_simple).Your Objective: We must now implement Step 2: building the actual outcome/quality signal to replace the placeholder in plot_frontier.py. Since we only know what the logged model did, we need to prove off-policy that routing to a cheaper model would have maintained trajectory success. We will do this via Task-Completion Detection combined with Trajectory Matching.Step 1: Create the Task-Completion DetectorCreate a new script named outcome_evaluator.py. It needs to parse the final state of every reconstructed trajectory in export/ to assign a binary success label.Logic: Look at the final assistant message or the final function_call_output in each trajectory. In the synthetic data, successes often end with specific verification strings (e.g., "Both moved and verified."). Write a robust heuristic that flags whether the trajectory ultimately completed its objective based on these terminal messages.  Output: Save a dictionary mapping trajectory_id -> { "logged_model": str, "success": bool } to results/outcomes.json.Step 2: Build the Propensity Matching Model
+Extend outcome_evaluator.py to calculate the counterfactual quality of our routes. We have a natural experiment: different trajectories were assigned to different models.  Logic: Group trajectories by their "early features" from call_features.csv (e.g., task_category, has_input_image on call 1, and trajectory length).  The Math: For any given cluster of similar tasks, calculate the historical success rate of the cheaper models (like gpt-5.6-luna or claude-sonnet-5) versus the premium models (like claude-fable-5).  The Signal: If a task cluster shows that gpt-5.6-luna has a 95% success rate when has_reasoning is 0, we can confidently assign a high quality score to our router when it downgrades similar calls. Create a function estimate_route_quality(trajectory_id, proposed_route) that uses these matched success rates to output a probability between 0.0 and 1.0.Step 3: Integrate with the Frontier Plot
+Modify plot_frontier.py. Remove the naive placeholder quality(rec) function.  Import your new estimate_route_quality function from outcome_evaluator.py.When evaluating a route in plot_frontier.py, the quality should now represent the expected success probability of the trajectory under the new proposed route, rather than just the fraction of calls kept on the logged model.  Step 4: Execute and AnalyzeRun the new pipeline end-to-end. Output a summary to the console detailing the matched success rates across model families. Let me know if any task clusters lack enough representation to make a statistically significant match, so we can adjust our grouping strictness.
+
+---
+
+Context: We are on Step 3 of the Viktor Hackathon challenge. We successfully generated results/call_features.csv and built our expected-success estimator in outcome_evaluator.py.
+
+Your Objective: Upgrade baseline_router.py into a new script named smart_router.py. We need to move from the naive SMALL_TRAJECTORY threshold to a real predictive policy that maximizes our cost-quality frontier.
+
+Step 1: The Predictive Core
+Implement a lightweight classifier (e.g., Logistic Regression or Decision Tree using scikit-learn) or a statistically weighted scoring system. Train it on call_features.csv to predict the probability of success for a cheap model on any given call. Heavily weight the signals we found earlier: has_reasoning, has_input_image, position_fraction, and task_category.
+
+Step 2: Cache-Aware Policy (The 'Upgrade Once' Rule)
+Build the router to step through each trajectory sequentially. Default to starting the trajectory on the cheap sibling model (e.g., gpt-5.6-luna). At each step, evaluate the predicted success probability. If it drops below a strict safety threshold (e.g., 0.85) due to emerging complexity, trigger an upgrade to the logged premium model. Crucial: Once upgraded, you must lock into the premium model for all remaining calls in that trajectory to fully exploit the cache-read discount. Never downgrade mid-task.
+
+Step 3: Export and Evaluate
+Output the new routing decisions to results/routes_smart.jsonl. Ensure the schema matches the baseline exactly. Finally, run plot_frontier_2.py against this new JSONL to verify that the "elbow" of our cost-quality curve has shifted up and to the left.
+
+---
+
+**Context:** We are preparing our final solution and presentation for the Viktor Hackathon. In Step 3, we observed that dynamic mid-trajectory switching incurred heavy cache-reset penalties. 
+
+**Your Objective:** Execute a two-part upgrade:
+1. Refactor `smart_router.py` into an **Opening-Call Commitment Router** (0 switches, zero cache-reset penalty).
+2. Complete Step 4: **Tighten the off-policy evaluation**, verify cache-aware repricing, and quantify statistical uncertainty and failure bounds.
+
+---
+
+### Part 1: Refactor `smart_router.py` (Opening-Call Commitment)
+Modify `smart_router.py`:
+- **Single Gating Decision:** In `route_trajectory()`, evaluate only the features of the opening call (`call_index == 1` / first feature row). 
+- **Zero Switches:** Decide either `cheap_for(logged_model)` or `logged_model` for the **entire trajectory** upfront based on whether the opener's predicted cheap-success score exceeds `--threshold`.
+- **Invariants:** Every route in `results/routes_smart.jsonl` must have `switches == 0`.
+- **Threshold Optimization:** Run a sweep across decision thresholds (e.g., 0.60 to 0.95 in 0.05 steps) to find the threshold that strictly pushes the frontier up-and-left of the baseline.
+
+---
+
+### Part 2: Step 4 — Tighten Off-Policy Evaluation (`outcome_evaluator.py`)
+Enhance `outcome_evaluator.py` and the evaluation harness:
+1. **Stratified Weighting & Matching Integrity:**
+   - Formalize Coarsened Exact Matching (CEM) over the early feature vector: `(task_category, has_input_image, length_bucket)`.
+   - Compute and report the Effective Sample Size (ESS) and overlap across matched strata.
+2. **Quantify Failure Modes & Sensitivity:**
+   - For every point on the frontier, compute 95% Wilson confidence intervals for the expected success rate.
+   - Quantify unobserved confounding sensitivity (Rosenbaum bounds or a simple sensitivity parameter $\Gamma$ showing how strong an unobserved confounder must be to flip the quality superiority).
+3. **Cache-Aware Repricing Sanity Check:**
+   - Explicitly verify that `trajectory_cost()` correctly charges the uncached rate only for the first call and bills consecutive calls with the same model at the cache-read rate.
+
+---
+
+### Part 3: Generate Frontier & Comparison Report
+1. Re-run `smart_router.py` with the optimal threshold to produce `results/routes_smart.jsonl`.
+2. Run `plot_frontier_2.py` to regenerate `results/frontier_2.csv` and `results/frontier_2.png` comparing:
+   - Logged policy (100% premium/logged models)
+   - Baseline heuristic router (`SMALL_TRAJECTORY` threshold)
+   - Smart opening-call commitment router (ML-gated)
+3. Print a summary to the console detailing:
+   - Dollar savings ($ and %) vs. logged cost.
+   - Expected quality retention vs. baseline.
+   - Exact failure modes: sample sparsity, observational confounding, and label noise.
+
+---
+
+**Context:** We are preparing our final solution and presentation for the Viktor Hackathon. In Step 3, we observed that dynamic mid-trajectory switching incurred heavy cache-reset penalties. 
+
+**Your Objective:** Execute a two-part upgrade:
+1. Refactor `smart_router.py` into an **Opening-Call Commitment Router** (0 switches, zero cache-reset penalty).
+2. Complete Step 4: **Tighten the off-policy evaluation**, verify cache-aware repricing, and quantify statistical uncertainty and failure bounds.
+
+---
+
+### Part 1: Refactor `smart_router.py` (Opening-Call Commitment)
+Modify `smart_router.py`:
+- **Single Gating Decision:** In `route_trajectory()`, evaluate only the features of the opening call (`call_index == 1` / first feature row). 
+- **Zero Switches:** Decide either `cheap_for(logged_model)` or `logged_model` for the **entire trajectory** upfront based on whether the opener's predicted cheap-success score exceeds `--threshold`.
+- **Invariants:** Every route in `results/routes_smart.jsonl` must have `switches == 0`.
+- **Threshold Optimization:** Run a sweep across decision thresholds (e.g., 0.60 to 0.95 in 0.05 steps) to find the threshold that strictly pushes the frontier up-and-left of the baseline.
+
+---
+
+### Part 2: Step 4 — Tighten Off-Policy Evaluation (`outcome_evaluator.py`)
+Enhance `outcome_evaluator.py` and the evaluation harness:
+1. **Stratified Weighting & Matching Integrity:**
+   - Formalize Coarsened Exact Matching (CEM) over the early feature vector: `(task_category, has_input_image, length_bucket)`.
+   - Compute and report the Effective Sample Size (ESS) and overlap across matched strata.
+2. **Quantify Failure Modes & Sensitivity:**
+   - For every point on the frontier, compute 95% Wilson confidence intervals for the expected success rate.
+   - Quantify unobserved confounding sensitivity (Rosenbaum bounds or a simple sensitivity parameter $\Gamma$ showing how strong an unobserved confounder must be to flip the quality superiority).
+3. **Cache-Aware Repricing Sanity Check:**
+   - Explicitly verify that `trajectory_cost()` correctly charges the uncached rate only for the first call and bills consecutive calls with the same model at the cache-read rate.
+
+---
+
+### Part 3: Generate Frontier & Comparison Report
+1. Re-run `smart_router.py` with the optimal threshold to produce `results/routes_smart.jsonl`.
+2. Run `plot_frontier_2.py` to regenerate `results/frontier_2.csv` and `results/frontier_2.png` comparing:
+   - Logged policy (100% premium/logged models)
+   - Baseline heuristic router (`SMALL_TRAJECTORY` threshold)
+   - Smart opening-call commitment router (ML-gated)
+3. Print a summary to the console detailing:
+   - Dollar savings ($ and %) vs. logged cost.
+   - Expected quality retention vs. baseline.
+   - Exact failure modes: sample sparsity, observational confounding, and label noise.
+
+---
+
+Create a meaningfull README.md general for git repo. main goal is to have for Hackathon the smart_router ready and all we need for it to work. mention how to run it and get results e.g.  graph. Do as you think will be better
+
+---
+
+**Context:** We are finishing the Viktor Hackathon challenge. We have engineered an Opening-Call Commitment Router (`smart_router.py`), run Coarsened Exact Matching (CEM) off-policy evaluation (`outcome_evaluator.py`), and generated our validated cost–quality frontier (`results/frontier_2.png` and `results/frontier_2.csv`).
+
+**Your Objective:** Build the complete, standalone 5-minute presentation deck in `presentation.html` (using the structure and styles in `templates/presentation.html` or the `/make-presentation` skill). The presentation must strictly adhere to the challenge requirements: **One Core Claim**, **One Chart**, and **One Named Weakness**.
+
+---
+
+### Key Data & Metrics to Embed
+
+- **Baseline vs. Smart Router:**
+  - **Logged Cost:** $0.2524 (Reference Expected Quality: 0.833)
+  - **Baseline Router:** $0.0957 (Cost -62.1%, Expected Quality: 0.820)
+  - **Smart Router (Threshold = 0.75):** $0.1126 (Cost -55.4%, Expected Quality: 0.833, 101.6% quality retention vs. baseline)
+  - **Switch Invariant:** Exactly 0 switches across all 25 trajectories (100% prefix cache retention, 0 cache-reset penalties).
+
+- **Off-Policy Evaluation Rigor & Named Weakness:**
+  - **Matching Method:** Coarsened Exact Matching (CEM) on early features `(task_category, has_input_image, length_bucket)`.
+  - **Overlap & Sample Size:** 5/6 strata overlap across 23/25 trajectories; Weighted Effective Sample Size $\text{ESS} = 13.43$.
+  - **Uncertainty & Sensitivity:** 95% Wilson CI $[0.646, 0.932]$; Rosenbaum Sensitivity Bound $\Gamma \approx 1.10$ (a 10% unobserved selection bias would flip the quality advantage).
+
+---
+
+### Presentation Slide Structure (5 Slides / 5 Minutes)
+
+1. **Slide 1: Title & The Core Mission**
+   - **Title:** Viktor Smart Router: Cache-Aware Policy & Off-Policy Proof
+   - **Subtitle:** Slashing Agent Costs by 55.4% Without Cache Penalties
+   - **Team / Context:** TUM.ai Hackathon (August 2026)
+
+2. **Slide 2: The Core Claim & The Cache Trap Mechanism**
+   - **The Problem:** Naive step-by-step routing breaks prompt caching, causing severe cost spikes on model switches.
+   - **The Policy:** Opening-Call Commitment — an L2-regularized classifier gates the entire trajectory at Call 1 based on early signals (`has_reasoning`, `has_input_image`, `task_category`), guaranteeing 0 mid-task cache resets.
+
+3. **Slide 3: The Headline Chart (The Cost–Quality Frontier)**
+   - Embed `results/frontier_2.png`.
+   - **Key Takeaway:** Explaining the Pareto frontier. Smart routing operates at the empirical knee (Threshold 0.75), delivering higher quality retention (0.833 vs. 0.820) for just $0.0169 incremental cost over naive length heuristics.
+
+4. **Slide 4: Off-Policy Rigor & The Named Weakness (The Honesty Slide)**
+   - **The Methodology:** Natural experiment evaluation via Coarsened Exact Matching (CEM) + Task Completion detection.
+   - **Transparent Failure Bounds (Our Named Weakness):**
+     - Small sample size ($n=25$, $\text{ESS}=13.43$) yields wide confidence intervals ($[0.646, 0.932]$).
+     - Fragility to unobserved confounding ($\Gamma \approx 1.10$).
+     - No claim of absolute counterfactual proof — observational matching with smoothed back-offs.
+
+5. **Slide 5: Summary & Production Readiness**
+   - **Summary Matrix:** Comparison table of Logged vs. Baseline vs. Smart.
+   - **Next Step:** Instant compatibility to run on live logs via `python scripts/smart_router.py <export_dir>`.
+
+---
+
+### Execution Instructions
+1. Inspect `templates/presentation.html` for existing styling, CSS classes, and branding.
+2. Generate/update `presentation.html` as a self-contained, responsive HTML slide deck embedding the metrics and `results/frontier_2.png`.
+3. Ensure no placeholder text remains.
+
+---
+
+**Context:** We are finishing the Viktor Hackathon challenge. We have engineered an Opening-Call Commitment Router (`smart_router.py`), run Coarsened Exact Matching (CEM) off-policy evaluation (`outcome_evaluator.py`), and generated our validated cost–quality frontier (`results/frontier_2.png` and `results/frontier_2.csv`).
+
+**Your Objective:** Build the complete, standalone 5-minute presentation deck in `presentation.html` (using the structure and styles in `templates/presentation.html` or the `/make-presentation` skill). The presentation must strictly adhere to the challenge requirements: **One Core Claim**, **One Chart**, and **One Named Weakness**.
+
+---
+
+### Key Data & Metrics to Embed
+
+- **Baseline vs. Smart Router:**
+  - **Logged Cost:** $0.2524 (Reference Expected Quality: 0.833)
+  - **Baseline Router:** $0.0957 (Cost -62.1%, Expected Quality: 0.820)
+  - **Smart Router (Threshold = 0.75):** $0.1126 (Cost -55.4%, Expected Quality: 0.833, 101.6% quality retention vs. baseline)
+  - **Switch Invariant:** Exactly 0 switches across all 25 trajectories (100% prefix cache retention, 0 cache-reset penalties).
+
+- **Off-Policy Evaluation Rigor & Named Weakness:**
+  - **Matching Method:** Coarsened Exact Matching (CEM) on early features `(task_category, has_input_image, length_bucket)`.
+  - **Overlap & Sample Size:** 5/6 strata overlap across 23/25 trajectories; Weighted Effective Sample Size $\text{ESS} = 13.43$.
+  - **Uncertainty & Sensitivity:** 95% Wilson CI $[0.646, 0.932]$; Rosenbaum Sensitivity Bound $\Gamma \approx 1.10$ (a 10% unobserved selection bias would flip the quality advantage).
+
+---
+
+### Presentation Slide Structure (5 Slides / 5 Minutes)
+
+1. **Slide 1: Title & The Core Mission**
+   - **Title:** Viktor Smart Router: Cache-Aware Policy & Off-Policy Proof
+   - **Subtitle:** Slashing Agent Costs by 55.4% Without Cache Penalties
+   - **Team / Context:** TUM.ai Hackathon (August 2026)
+
+2. **Slide 2: The Core Claim & The Cache Trap Mechanism**
+   - **The Problem:** Naive step-by-step routing breaks prompt caching, causing severe cost spikes on model switches.
+   - **The Policy:** Opening-Call Commitment — an L2-regularized classifier gates the entire trajectory at Call 1 based on early signals (`has_reasoning`, `has_input_image`, `task_category`), guaranteeing 0 mid-task cache resets.
+
+3. **Slide 3: The Headline Chart (The Cost–Quality Frontier)**
+   - Embed `results/frontier_2.png`.
+   - **Key Takeaway:** Explaining the Pareto frontier. Smart routing operates at the empirical knee (Threshold 0.75), delivering higher quality retention (0.833 vs. 0.820) for just $0.0169 incremental cost over naive length heuristics.
+
+4. **Slide 4: Off-Policy Rigor & The Named Weakness (The Honesty Slide)**
+   - **The Methodology:** Natural experiment evaluation via Coarsened Exact Matching (CEM) + Task Completion detection.
+   - **Transparent Failure Bounds (Our Named Weakness):**
+     - Small sample size ($n=25$, $\text{ESS}=13.43$) yields wide confidence intervals ($[0.646, 0.932]$).
+     - Fragility to unobserved confounding ($\Gamma \approx 1.10$).
+     - No claim of absolute counterfactual proof — observational matching with smoothed back-offs.
+
+5. **Slide 5: Summary & Production Readiness**
+   - **Summary Matrix:** Comparison table of Logged vs. Baseline vs. Smart.
+   - **Next Step:** Instant compatibility to run on live logs via `python scripts/smart_router.py <export_dir>`.
+
+---
+
+### Execution Instructions
+1. Inspect `templates/presentation.html` for existing styling, CSS classes, and branding.
+2. Generate/update `presentation.html` as a self-contained, responsive HTML slide deck embedding the metrics and `results/frontier_2.png`.
+3. Ensure no placeholder text remains.
+
+---
+
+is 0 model switches across 25 reconstructed trajectories actually good? in regards to basic router provided by Viktor? what is baseline how is it differ from our smartline and why base line is not the basic router that was initially at low accuracy and super low cost. Explain it, dont code anything.
+
+---
+
+I would say that baseline is logged $0.2524, and our first steps made 'Viktor' line, and our next step made it deployable and Smart router . why is it not true, or is it close to the truth?
+
+---
+
+can you create a graph for it, to comppare all 3 approaches?
+
+---
+
+what does 0 switches means? we did not change any model from the data? or what? how does it become cheaper if we didnt change it? looks like I lost idea and meaning
+
+---
+
+but we say we have 0 switches, but actually changed models in use, what do I need to understan for the presentation?
+
+---
+
+redo the presentation, demonstrate a trajectories using our smart switch vs logged default starter data
+
+---
+
+bad collors on last slide, for the smart 0.75 row. Also what 0.75 stands after? also why smart router is deployable? did I make it?
+
+---
+
+What do I submit? What should I submit? What will I submit?
+Viktor
+БОТ
+ — 10:28
+Three things:
+
+A router
+ — code that picks a model per call, plus how to run it on the dataset.
+
+An evaluation you can defend
+ — an off-policy estimate of what your router would have changed vs. the observed policy: fixed split, stated cost model (cache-aware, estimated tokens labeled as estimates), stated quality proxy. Include baselines — always-cheapest, always-strongest, observed, random-at-matched-cost — and compare at matched cost across the whole sweep, not each approach at its prettiest point. Honest CIs and negative results score well; there's a special prize for the best off-policy-evaluation insight.
+
+A short presentation
+ — judged on routing insight, evaluation rigor, presentation clarity. One frontier plot, one comparison table, a sentence per approach on why it won or lost.
+
+Exact format, deadline and team size follow the general TUM.ai hackathon rules confirmed at the kickoff briefing — I won't guess those; check the pinned messages or ask the Viktor team here. The starter kit also ships a /prepare-submission skill for coding agents.
+
+---
+
+1. Required baselines:
+      - Always cheapest
+      - Always strongest
+      - Observed/logged
+      - Random routing at matched cost
+      - Viktor length heuristic
+      - Smart router
+
+---
+
+can you add   1. Required baselines:
+      - Always cheapest
+      - Always strongest
+      - Observed/logged
+      - Random routing at matched cost
+      - Viktor length heuristic
+      - Smart router?
+
+---
+
+whats next?

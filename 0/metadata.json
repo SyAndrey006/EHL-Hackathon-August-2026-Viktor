@@ -1,0 +1,57 @@
+{
+  "cli_version": "0.10.2",
+  "checkpoint_id": "01M0PY5SGKN1QS77M959R3DJAM",
+  "session_id": "01a02d1d-9536-7cf0-b862-db2191976cc4",
+  "strategy": "manual-commit",
+  "created_at": "2026-08-23T09:10:44.7040542Z",
+  "branch": "main",
+  "checkpoints_count": 3,
+  "save_step_count": 3,
+  "files_touched": [
+    "viktor-tumai-starter/presentation.html",
+    "viktor-tumai-starter/scripts/evaluate_required_baselines.py",
+    "viktor-tumai-starter/scripts/plot_policy_comparison.py"
+  ],
+  "agent": "Codex",
+  "model": "gpt-5.6-sol",
+  "turn_id": "278e1dc0a6bc",
+  "compact_transcript_start": 0,
+  "token_usage": {
+    "input_tokens": 577232,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 11567745,
+    "output_tokens": 76164,
+    "api_call_count": 119
+  },
+  "session_metrics": {
+    "turn_count": 17
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-08-23T09:10:44.3855922Z",
+    "agent_lines": 176,
+    "agent_removed": 11,
+    "human_added": 0,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 176,
+    "total_lines_changed": 187,
+    "agent_percentage": 100,
+    "metric_version": 2
+  },
+  "prompt_attributions": [
+    {
+      "checkpoint_number": 2,
+      "user_lines_added": 0,
+      "user_lines_removed": 0,
+      "agent_lines_added": 48,
+      "agent_lines_removed": 0
+    },
+    {
+      "checkpoint_number": 3,
+      "user_lines_added": 0,
+      "user_lines_removed": 0,
+      "agent_lines_added": 176,
+      "agent_lines_removed": 11
+    }
+  ]
+}
