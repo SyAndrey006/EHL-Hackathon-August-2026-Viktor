@@ -3,9 +3,10 @@
   "checkpoint_id": "01M0PQ1GH61A4FAXVBK6V2WJY4",
   "strategy": "manual-commit",
   "branch": "feature-TrySoloCodex",
-  "checkpoints_count": 10,
+  "checkpoints_count": 12,
   "files_touched": [
     "viktor-tumai-starter/scripts/baseline_router.py",
+    "viktor-tumai-starter/scripts/outcome_evaluator.py",
     "viktor-tumai-starter/scripts/plot_frontier.py"
   ],
   "sessions": [
@@ -29,13 +30,20 @@
       "compact_transcript": "/2/transcript.jsonl",
       "content_hash": "/2/content_hash.txt",
       "prompt": "/2/prompt.txt"
+    },
+    {
+      "metadata": "/3/metadata.json",
+      "transcript": "/3/full.jsonl",
+      "compact_transcript": "/3/transcript.jsonl",
+      "content_hash": "/3/content_hash.txt",
+      "prompt": "/3/prompt.txt"
     }
   ],
   "token_usage": {
-    "input_tokens": 174251,
+    "input_tokens": 271724,
     "cache_creation_tokens": 0,
-    "cache_read_tokens": 2272081,
-    "output_tokens": 52405,
-    "api_call_count": 65
+    "cache_read_tokens": 3431639,
+    "output_tokens": 71708,
+    "api_call_count": 86
   }
 }
