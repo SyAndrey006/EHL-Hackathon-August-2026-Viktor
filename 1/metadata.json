@@ -1,0 +1,39 @@
+{
+  "cli_version": "0.10.2",
+  "checkpoint_id": "01M0PQ1GH61A4FAXVBK6V2WJY4",
+  "session_id": "01a02af1-9215-76f3-83ed-0129be8ca116",
+  "strategy": "manual-commit",
+  "created_at": "2026-08-23T07:06:03.3978534Z",
+  "branch": "feature-TrySoloCodex",
+  "checkpoints_count": 3,
+  "save_step_count": 1,
+  "files_touched": [
+    "viktor-tumai-starter/scripts/baseline_router.py"
+  ],
+  "agent": "Codex",
+  "model": "gpt-5.6-terra",
+  "turn_id": "c6868e951d88",
+  "compact_transcript_start": 0,
+  "token_usage": {
+    "input_tokens": 53305,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 626944,
+    "output_tokens": 16759,
+    "api_call_count": 19
+  },
+  "session_metrics": {
+    "turn_count": 3
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-08-23T07:06:03.2839846Z",
+    "agent_lines": 0,
+    "agent_removed": 0,
+    "human_added": 228,
+    "human_modified": 56,
+    "human_removed": 0,
+    "total_committed": 284,
+    "total_lines_changed": 284,
+    "agent_percentage": 0,
+    "metric_version": 2
+  }
+}

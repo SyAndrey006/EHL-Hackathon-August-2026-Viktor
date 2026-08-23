@@ -1,0 +1,45 @@
+Read the @Entire codebase context, paying special attention to `scripts/learned_router.py`, `scripts/offpolicy_eval.py`, and `scripts/outcome_signal.py`.
+
+We have successfully implemented the baseline pipeline, but we are currently testing on a synthetic sample of only 25 trajectories. This microscopic dataset causes massive variance in our nearest-neighbor matching and severe overfitting in our depth-3 regression tree (routing 100% of tasks to the cheapest model). 
+
+I want to build a new "product" or feature extension for this pipeline that acts as a safety net or variance-reducer, making our routing logic robust enough to pitch to the judges even if the real dataset turns out to be highly noisy or sparse.
+
+Act as a Senior AI Architect and propose a concrete technical solution. (Examples could include a "Confidence-Aware Router" that calculates matching distance and falls back to the baseline if the confidence is too low, or a "Difficulty Calibrator" that normalizes the outcome signal based on prompt length to avoid penalizing complex tasks).
+
+Structure your response exactly as follows:
+1. **The Problem:** Briefly define the exact limitation/variance issue in the current pipeline that this product solves.
+2. **The Product & Reasoning:** Pitch the specific technical solution. Explain the architectural reasoning behind it and why it strictly adheres to our hackathon constraints (no API keys, offline execution, cache-aware pricing, whole-trajectory routing).
+3. **Pros & Cons:** Provide a brutally honest breakdown of the trade-offs (e.g., added engineering complexity vs. actual metric improvement). 
+4. **Implementation Plan:** Give me the exact, step-by-step instructions on how we will code and integrate this into the existing scripts. Do not write the full code yet, just the architectural blueprint.
+
+---
+
+The "Evidence-Gated Confidence Router" is exactly the product we are going to pitch. It perfectly solves our overfitting problem by turning off-policy evaluation into an operational guardrail. 
+
+Let's execute your Implementation Plan step-by-step. 
+
+Please generate the complete, fully functional Python code for `scripts/confidence_router.py`. 
+
+Requirements for this script based on your blueprint:
+1. It must import the necessary features and tree logic from `learned_router.py` (which we will treat as the proposal engine).
+2. It must extract only deployment-safe features (first_user_chars, first_input_tokens, tool count/set, has_image). **Strictly exclude `n_calls`** from the gate matching.
+3. For the tree's proposed candidate, it must find the nearest historical neighbors for both the logged model and the candidate model.
+4. Implement the bootstrap logic to calculate the distance-weighted lower confidence bound (e.g., 10th percentile).
+5. It must reject the switch and fall back to the logged model if the local support is < 3 or if the lower confidence bound drops below our QUALITY_TOLERANCE.
+6. It must write its decisions to `results/confidence_routes.jsonl` with all the detailed artifacts you listed (tree_proposal, final_route, gate_decision, fallback_reason, support counts, lower confidence bound).
+
+Do not modify `plot_frontier.py` or `offpolicy_eval.py` yet. Just write `scripts/confidence_router.py` and any shared helper files (like `routing_features.py`) it strictly requires to run. Ensure the code is heavily commented so I can explain the math to the judges.
+
+---
+
+@Entire 
+
+My current active checkout is missing `scripts/outcome_signal.py` and `scripts/learned_router.py`, causing `confidence_router.py` to throw a ModuleNotFoundError. 
+
+You noted earlier that their implementations exist in the repository history. Please restore both files completely and write them to the `scripts/` directory. 
+
+CRITICAL: You must restore the *updated* versions of these files that include the fixes we applied earlier:
+1. For `outcome_signal.py`: Ensure retry detection requires high token overlap as well as text similarity (so sequential step-0/step-1 calls aren't treated as backtracking).
+2. For `learned_router.py`: Ensure it permits candidates with at least two observed trajectories so the synthetic sample can exercise routing.
+
+Do not explain the code. Just recreate the files so I can run my confidence router.
