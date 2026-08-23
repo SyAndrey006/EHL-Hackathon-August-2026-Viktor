@@ -1,0 +1,75 @@
+{
+  "cli_version": "0.10.2",
+  "checkpoint_id": "01M0PV32RP0M4V25Y423XR8R2J",
+  "session_id": "01a02d1d-9536-7cf0-b862-db2191976cc4",
+  "strategy": "manual-commit",
+  "created_at": "2026-08-23T08:16:48.0879672Z",
+  "branch": "main",
+  "checkpoints_count": 1,
+  "save_step_count": 2,
+  "files_touched": [
+    "SKILL.md",
+    "router/__init__.py",
+    "router/costs.py",
+    "router/evaluator.py",
+    "router/features.py",
+    "router/loader.py",
+    "router/pipeline.py",
+    "router/policy.py",
+    "router/reconstruction.py",
+    "router/text.py",
+    "router/types.py",
+    "router_architecture.md",
+    "scripts/run_router_pipeline.py",
+    "starter/.claude/commands/make-presentation.md",
+    "starter/.claude/commands/prepare-submission.md",
+    "starter/.claude/commands/setup.md",
+    "starter/AGENTS.md",
+    "starter/CLAUDE.md",
+    "starter/README.md",
+    "starter/scripts/baseline_router.py",
+    "starter/scripts/cost_model.py",
+    "starter/scripts/load_trajectories.py",
+    "starter/scripts/make_synthetic_sample.py",
+    "starter/scripts/plot_frontier.py",
+    "starter/skills/make-presentation/SKILL.md",
+    "starter/skills/prepare-submission/SKILL.md",
+    "starter/skills/setup/SKILL.md",
+    "starter/templates/presentation.html"
+  ],
+  "agent": "Codex",
+  "model": "gpt-5.6-sol",
+  "turn_id": "abd130feb1d8",
+  "compact_transcript_start": 0,
+  "token_usage": {
+    "input_tokens": 328966,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 3857399,
+    "output_tokens": 46059,
+    "api_call_count": 69
+  },
+  "session_metrics": {
+    "turn_count": 5
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-08-23T08:16:47.9506396Z",
+    "agent_lines": 0,
+    "agent_removed": 0,
+    "human_added": 0,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 0,
+    "total_lines_changed": 0,
+    "agent_percentage": 0,
+    "metric_version": 2
+  },
+  "prompt_attributions": [
+    {
+      "checkpoint_number": 2,
+      "user_lines_added": 0,
+      "user_lines_removed": 0,
+      "agent_lines_added": 0,
+      "agent_lines_removed": 0
+    }
+  ]
+}
